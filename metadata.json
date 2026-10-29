@@ -1,0 +1,6 @@
+{
+  "name": "Hypervisor",
+  "description": "A clean, professional, and frontier agentic AI interface with dark luxury aesthetics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
