@@ -34,6 +34,8 @@ export interface ProjectFile {
   size?: string;
   tokens?: number | string;
   content?: string;
+  commitMessage?: string;
+  timeAgo?: string;
 }
 
 export interface Project {

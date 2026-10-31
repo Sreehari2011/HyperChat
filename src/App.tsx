@@ -39,6 +39,8 @@ export default function App() {
           type: 'file', 
           tokens: 1150,
           size: '1.2k tokens', 
+          commitMessage: 'feat(ui): add interactive control panel and state handlers',
+          timeAgo: '5 days ago',
           content: `import React, { useState } from 'react';\n\nexport default function ControlPanel() {\n  const [status, setStatus] = useState('active');\n  return (\n    <div className="control-panel">\n      <h2>Control Panel</h2>\n      <p>System state: {status}</p>\n    </div>\n  );\n}` 
         },
         { 
@@ -47,6 +49,8 @@ export default function App() {
           type: 'file', 
           tokens: 1400,
           size: '1.4k tokens', 
+          commitMessage: 'feat(telemetry): stream telemetry metrics and health checks',
+          timeAgo: 'last week',
           content: `import React from 'react';\n\nexport function DataPanel({ telemetry }: { telemetry: Record<string, number> }) {\n  return (\n    <div className="data-panel">\n      <h3>Telemetry Metrics</h3>\n    </div>\n  );\n}` 
         },
         { 
@@ -55,6 +59,8 @@ export default function App() {
           type: 'file', 
           tokens: 122,
           size: '122 tokens', 
+          commitMessage: 'style: update base Tailwind tokens and root color scheme',
+          timeAgo: '3 weeks ago',
           content: `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n:root {\n  --bg-primary: #121212;\n  --text-main: #f4f4f5;\n}` 
         },
         { 
@@ -63,6 +69,8 @@ export default function App() {
           type: 'file', 
           tokens: 175,
           size: '175 tokens', 
+          commitMessage: 'chore(layout): wrap root tree with metadata and providers',
+          timeAgo: 'last month',
           content: `export default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang="en">\n      <body>{children}</body>\n    </html>\n  );\n}` 
         },
         { 
@@ -71,6 +79,8 @@ export default function App() {
           type: 'file', 
           tokens: 3800,
           size: '3.8k tokens', 
+          commitMessage: 'feat(page): mount client control interface',
+          timeAgo: '3 weeks ago',
           content: `'use client';\n\nimport React from 'react';\nimport ControlPanel from './ControlPanel';\n\nexport default function Page() {\n  return (\n    <main className="min-h-screen p-8">\n      <ControlPanel />\n    </main>\n  );\n}` 
         },
         { 
@@ -79,6 +89,8 @@ export default function App() {
           type: 'file', 
           tokens: 3400,
           size: '3.4k tokens', 
+          commitMessage: 'fix(ollama): keyless env config and /v1 base URL normaliz...',
+          timeAgo: '5 days ago',
           content: `"""\nHypervisor Daemon Core\n"""\nimport logging\n\ndef run():\n    logging.info("Core orchestrator initialized")\n\nif __name__ == "__main__":\n    run()` 
         },
         { 
@@ -87,7 +99,29 @@ export default function App() {
           type: 'file', 
           tokens: 5125,
           size: '5.1k tokens', 
+          commitMessage: 'test: add unit test coverage for hypervisor orchestrator',
+          timeAgo: 'last month',
           content: `import unittest\n\nclass TestOrchestration(unittest.TestCase):\n    def test_startup(self):\n        self.assertTrue(True)` 
+        },
+        { 
+          id: generateId(), 
+          name: '.env.example', 
+          type: 'file', 
+          tokens: 110,
+          size: '110 tokens', 
+          commitMessage: 'Translate all Chinese text to English',
+          timeAgo: '3 weeks ago',
+          content: `API_KEY=your_key_here\nDATABASE_URL=postgres://localhost:5432/app\nPORT=3000` 
+        },
+        { 
+          id: generateId(), 
+          name: '.gitignore', 
+          type: 'file', 
+          tokens: 95,
+          size: '95 tokens', 
+          commitMessage: 'merge main (resolve .gitignore: keep both entries)',
+          timeAgo: '3 weeks ago',
+          content: `node_modules\n.DS_Store\n.env\ndist\nbuild` 
         },
         { 
           id: generateId(), 
@@ -95,6 +129,8 @@ export default function App() {
           type: 'file', 
           tokens: 198,
           size: '198 tokens', 
+          commitMessage: 'refactor(crypto): export sha256 hashing helper',
+          timeAgo: 'last month',
           content: `import hashlib\n\ndef hash_string(val: str) -> str:\n    return hashlib.sha256(val.encode()).hexdigest()` 
         }
       ]

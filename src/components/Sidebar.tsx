@@ -146,9 +146,9 @@ export default function Sidebar({
     return (
     <div
       key={menuId}
-      className={`flex items-center justify-between group px-3 py-2 rounded-lg text-sm transition-all text-left w-full cursor-pointer relative ${
+      className={`flex items-center justify-between group px-3 py-2 rounded-lg text-sm transition-colors duration-150 text-left w-full cursor-pointer relative ${
         isActive 
-          ? 'bg-[#27272a] text-white font-medium border border-white/10 shadow-sm hover:bg-[#2e2e33]' 
+          ? 'bg-[#27272a] text-white font-medium border border-white/10 shadow-sm' 
           : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200 border border-transparent'
       } ${activeMenuId === menuId ? 'z-50' : 'z-0'}`}
       onClick={() => onSelectProject(project.id)}
@@ -238,9 +238,9 @@ export default function Sidebar({
     return (
     <div
       key={menuId}
-      className={`flex items-center justify-between group px-3 py-2 rounded-lg text-sm transition-all text-left w-full cursor-pointer relative ${
+      className={`flex items-center justify-between group px-3 py-2 rounded-lg text-sm transition-colors duration-150 text-left w-full cursor-pointer relative ${
         isActive 
-          ? 'bg-[#27272a] text-white font-medium border border-white/10 shadow-sm hover:bg-[#2e2e33]' 
+          ? 'bg-[#27272a] text-white font-medium border border-white/10 shadow-sm' 
           : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200 border border-transparent'
       } ${activeMenuId === menuId ? 'z-50' : 'z-0'}`}
       onClick={() => onSelectChat(chat.id)}
@@ -323,16 +323,16 @@ export default function Sidebar({
   ) => (
     <button 
       onClick={onClick}
-      className={`flex items-center justify-between rounded-lg transition-all text-left w-full overflow-hidden h-10 group cursor-pointer relative pr-2.5 ${
+      className={`flex items-center rounded-lg text-left w-full h-10 group cursor-pointer relative px-2.5 transition-colors duration-150 ${
         isActive 
-          ? 'bg-[#27272a] text-white font-medium shadow-sm border border-white/10 hover:bg-[#2e2e33]' 
-          : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200 border border-transparent'
+          ? 'bg-[#27272a] text-white font-medium' 
+          : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
       }`}
       title={!isOpen ? (title || label) : undefined}
     >
-      <div className="flex items-center min-w-0 overflow-hidden">
-        <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+      <div className="flex items-center min-w-0 overflow-hidden relative z-10 w-full">
+        <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors duration-150 ${
             isActive
               ? 'bg-[#38383c] border border-white/20 text-white shadow-inner' 
               : 'bg-[#181818] border border-[#262626] text-zinc-400 group-hover:bg-[#202022] group-hover:border-[#38383c] group-hover:text-zinc-200'
@@ -340,31 +340,39 @@ export default function Sidebar({
             {icon}
           </div>
         </div>
-        <span className={`whitespace-nowrap text-sm ${isActive ? 'font-medium text-white' : 'font-normal text-zinc-400 group-hover:text-zinc-200'} transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>
-          {label}
-        </span>
+        {isOpen && (
+          <span 
+            className={`whitespace-nowrap text-sm ml-2.5 overflow-hidden truncate ${
+              isActive ? 'font-medium text-white' : 'font-normal text-zinc-400 group-hover:text-zinc-200'
+            }`}
+          >
+            {label}
+          </span>
+        )}
       </div>
     </button>
   );
 
   return (
-    <div 
-      className={`flex flex-col h-full bg-[#111] border-r border-[#222] flex-shrink-0 transition-[width] duration-300 ease-in-out overflow-hidden ${
-        isOpen ? 'w-[290px]' : 'w-[64px]'
+    <aside 
+      className={`flex flex-col h-full bg-[#111] border-r border-[#222] flex-shrink-0 overflow-hidden select-none relative ${
+        isOpen ? 'w-[290px]' : 'w-16'
       }`}
     >
-      <div className="flex items-center px-3 h-[60px] flex-shrink-0">
-        <button
-          onClick={onNewChat}
-          className={`text-2xl font-semibold text-zinc-100 tracking-wide font-serif whitespace-nowrap overflow-hidden transition-all duration-300 hover:text-white text-left ${
-            isOpen ? 'w-[210px] opacity-100 ml-1' : 'w-0 opacity-0 ml-0'
-          }`}
-        >
-          Hypervisor
-        </button>
+      <div className="flex items-center justify-between px-3 h-[60px] flex-shrink-0 overflow-hidden">
+        <div className="flex items-center min-w-0 overflow-hidden">
+          {isOpen && (
+            <button
+              onClick={onNewChat}
+              className="text-2xl font-semibold text-zinc-100 tracking-wide font-serif whitespace-nowrap overflow-hidden hover:text-white text-left ml-1 cursor-pointer"
+            >
+              Hypervisor
+            </button>
+          )}
+        </div>
         <button 
           onClick={handleToggleOpen}
-          className="w-10 h-10 flex items-center justify-center hover:bg-white/[0.06] rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors flex-shrink-0"
+          className="w-10 h-10 flex items-center justify-center hover:bg-white/[0.06] rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors flex-shrink-0 cursor-pointer"
           title={isOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
         >
           {isOpen ? <PanelLeftClose size={20} strokeWidth={1.5} /> : <PanelLeftOpen size={20} strokeWidth={1.5} />}
@@ -416,10 +424,8 @@ export default function Sidebar({
           )}
         </div>
 
-        <div 
-          className={`grid transition-all duration-300 ease-in-out w-full min-w-0 ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 invisible'}`}
-        >
-          <div className={`flex flex-col gap-6 min-h-0 min-w-0 w-full ${isOpen ? 'overflow-visible' : 'overflow-hidden'}`}>
+        {isOpen && (
+          <div className="flex flex-col gap-6 min-h-0 min-w-0 w-full overflow-hidden">
             {(flaggedChats.length > 0 || flaggedProjects.length > 0) && (
               <div className="flex flex-col gap-0.5 w-full min-w-0">
                 <div className="text-xs font-medium text-zinc-500 tracking-wider px-3 mb-1 whitespace-nowrap">
@@ -439,26 +445,24 @@ export default function Sidebar({
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
 
       <div className="border-t border-[#222] p-3 flex-shrink-0 relative" ref={userMenuRef}>
         <button 
           ref={userButtonRef}
           onClick={handleToggleUserMenu}
-          className="flex items-center rounded-lg hover:bg-white/[0.05] transition-colors group w-full overflow-hidden h-10 cursor-pointer"
+          className="flex items-center rounded-lg hover:bg-white/[0.05] transition-colors group w-full overflow-hidden h-10 cursor-pointer px-1"
           title={!isOpen ? "User Menu" : undefined}
         >
-          <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
-            <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-medium text-zinc-200 group-hover:ring-2 ring-zinc-700 transition-all">
-              SH
-            </div>
+          <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-medium text-zinc-200 group-hover:ring-2 ring-zinc-700 transition-colors flex-shrink-0 ml-1">
+            SH
           </div>
-          <div className={`flex items-center justify-between overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'opacity-100 ml-2 max-w-[150px]' : 'opacity-0 ml-0 max-w-0 invisible'}`}>
-            <span className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors whitespace-nowrap">
+          {isOpen && (
+            <span className="text-sm font-medium text-zinc-300 group-hover:text-white whitespace-nowrap ml-3 overflow-hidden">
               Sreehari H
             </span>
-          </div>
+          )}
         </button>
         
         {userMenuOpen && userMenuPos && createPortal(
@@ -594,6 +598,6 @@ export default function Sidebar({
           </div>
         </div>
       )}
-    </div>
+    </aside>
   );
 }

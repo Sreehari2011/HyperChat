@@ -45,6 +45,7 @@ export default function ActiveChatView({
 
   const totalSessionTokens = sessionMessagesTokens + draftTokens;
   const maxModelTokens = selectedModel === 'cisai-ultra' ? 1000000 : selectedModel === 'cisai-pro' ? 128000 : 32000;
+  const isAgentChat = Boolean(chat.agentId || chat.agentName);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -54,7 +55,7 @@ export default function ActiveChatView({
     <div className="flex-1 flex flex-col h-full bg-[#151515] relative">
       <div className="absolute top-0 left-0 w-full z-10 pointer-events-none flex flex-col">
         <div className="bg-[#151515] pt-5 px-6 pb-2 flex items-center gap-2">
-          {chat.isGhost && (
+          {!isAgentChat && chat.isGhost && (
             <span className="pointer-events-auto ml-2 px-2.5 py-0.5 rounded text-[11px] font-medium bg-white/[0.08] text-white border border-white/20 shrink-0 flex items-center gap-1.5 shadow-[0_0_10px_rgba(255,255,255,0.12)]">
               <Ghost size={12} className="text-white drop-shadow-[0_0_4px_rgba(255,255,255,0.8)]" />
               Ghost Mode - Your chats will be Secrets
@@ -72,7 +73,7 @@ export default function ActiveChatView({
             <TokenCounter 
               tokens={totalSessionTokens} 
               maxTokens={maxModelTokens}
-              isGhostMode={chat.isGhost}
+              isGhostMode={!isAgentChat && chat.isGhost}
             />
           </div>
         </div>
@@ -130,7 +131,8 @@ export default function ActiveChatView({
       <div className="p-4 bg-gradient-to-t from-[#151515] to-transparent">
         <ChatInput 
           onSendMessage={onSendMessage} 
-          isGhostMode={chat.isGhost}
+          isGhostMode={!isAgentChat && chat.isGhost}
+          disableGhostMode={isAgentChat}
           loadedProject={loadedProject}
           onUnloadProject={onUnloadProject}
           loadedSkill={loadedSkill}

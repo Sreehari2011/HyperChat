@@ -80,6 +80,7 @@ export default function AgentChatView({
             <ChatInput 
               onSendMessage={onSendMessage} 
               isInitial={true} 
+              disableGhostMode={true}
               loadedProject={loadedProject}
               onUnloadProject={onUnloadProject}
               loadedSkill={loadedSkill}

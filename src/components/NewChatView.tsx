@@ -51,44 +51,47 @@ export default function NewChatView({
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col h-full items-center justify-center p-6 relative">
-      <div className="absolute top-5 right-6 z-20 pointer-events-auto">
-        <TokenCounter 
-          tokens={draftTokens} 
-          maxTokens={maxModelTokens}
-        />
-      </div>
-
-      <motion.div 
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-3xl flex flex-col items-center justify-center mb-12 gap-6"
-      >
-        <div className="flex items-center gap-3 text-zinc-400">
-          <h1 className="text-4xl md:text-5xl font-display text-zinc-200 tracking-tight text-center">
-            {greeting}
-          </h1>
-        </div>
-        
-        <div className="w-full">
-          <ChatInput 
-            onSendMessage={onSendMessage} 
-            isInitial={true} 
-            loadedProject={loadedProject}
-            onUnloadProject={onUnloadProject}
-            loadedSkill={loadedSkill}
-            onUnloadSkill={onUnloadSkill}
-            selectedModel={selectedModel}
-            onSelectModel={onSelectModel}
-            projects={projects}
-            skills={skills}
-            onLoadProject={onLoadProject}
-            onLoadSkill={onLoadSkill}
-            onTokenCountChange={setDraftTokens}
+    <div className="flex-1 flex h-full bg-[#151515] relative overflow-hidden">
+      {/* Main Chat Column */}
+      <div className="flex-1 flex flex-col h-full min-w-0 items-center justify-center p-6 relative overflow-y-auto no-scrollbar">
+        <div className="absolute top-5 right-6 z-20 pointer-events-auto flex items-center gap-2.5">
+          <TokenCounter 
+            tokens={draftTokens} 
+            maxTokens={maxModelTokens}
           />
         </div>
-      </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-3xl flex flex-col items-center justify-center mb-12 gap-6"
+        >
+          <div className="flex items-center gap-3 text-zinc-400">
+            <h1 className="text-4xl md:text-5xl font-display text-zinc-200 tracking-tight text-center">
+              {greeting}
+            </h1>
+          </div>
+          
+          <div className="w-full">
+            <ChatInput 
+              onSendMessage={onSendMessage} 
+              isInitial={true} 
+              loadedProject={loadedProject}
+              onUnloadProject={onUnloadProject}
+              loadedSkill={loadedSkill}
+              onUnloadSkill={onUnloadSkill}
+              selectedModel={selectedModel}
+              onSelectModel={onSelectModel}
+              projects={projects}
+              skills={skills}
+              onLoadProject={onLoadProject}
+              onLoadSkill={onLoadSkill}
+              onTokenCountChange={setDraftTokens}
+            />
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }

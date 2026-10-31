@@ -49,6 +49,7 @@ interface ChatInputProps {
   isGhostMode?: boolean;
   onToggleGhostMode?: (enabled: boolean) => void;
   onTokenCountChange?: (count: number) => void;
+  disableGhostMode?: boolean;
 }
 
 function formatFileSize(bytes: number): string {
@@ -73,7 +74,8 @@ export default function ChatInput({
   extensionBanner,
   isGhostMode,
   onToggleGhostMode,
-  onTokenCountChange
+  onTokenCountChange,
+  disableGhostMode = false
 }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const [localModel, setLocalModel] = useState<string>('cisai-lite');
@@ -88,9 +90,10 @@ export default function ChatInput({
   const [isGhostHovered, setIsGhostHovered] = useState(false);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const activeGhostMode = isGhostMode !== undefined ? isGhostMode : localGhostMode;
+  const activeGhostMode = !disableGhostMode && (isGhostMode !== undefined ? isGhostMode : localGhostMode);
 
   const handleToggleGhost = () => {
+    if (disableGhostMode) return;
     const next = !activeGhostMode;
     setLocalGhostMode(next);
     onToggleGhostMode?.(next);
@@ -521,52 +524,54 @@ export default function ChatInput({
             </div>
 
             {/* Ghost Mode (Incognito / Temporary Chat) Toggle */}
-            <div className="relative z-30 flex items-center">
-              <button 
-                type="button"
-                onClick={() => {
-                  handleGhostMouseLeave();
-                  handleToggleGhost();
-                }}
-                onMouseEnter={handleGhostMouseEnter}
-                onMouseLeave={handleGhostMouseLeave}
-                className={`p-2 rounded-full transition-colors flex-shrink-0 cursor-pointer relative ${
-                  activeGhostMode 
-                    ? 'hover:bg-white/[0.06]' 
-                    : 'hover:bg-[#333]'
-                }`}
-                aria-label="Toggle Ghost Mode (Temporary chat)"
-              >
-                <Ghost 
-                  size={19} 
-                  strokeWidth={2} 
-                  className={`transition-colors duration-200 ${
+            {!disableGhostMode && (
+              <div className="relative z-30 flex items-center">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    handleGhostMouseLeave();
+                    handleToggleGhost();
+                  }}
+                  onMouseEnter={handleGhostMouseEnter}
+                  onMouseLeave={handleGhostMouseLeave}
+                  className={`p-2 rounded-full transition-colors flex-shrink-0 cursor-pointer relative ${
                     activeGhostMode 
-                      ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.95)]' 
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`} 
-                />
-              </button>
+                      ? 'hover:bg-white/[0.06]' 
+                      : 'hover:bg-[#333]'
+                  }`}
+                  aria-label="Toggle Ghost Mode (Temporary chat)"
+                >
+                  <Ghost 
+                    size={19} 
+                    strokeWidth={2} 
+                    className={`transition-colors duration-200 ${
+                      activeGhostMode 
+                        ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.95)]' 
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`} 
+                  />
+                </button>
 
-              {/* Hover Tooltip: Ghost Mode */}
-              <AnimatePresence>
-                {isGhostHovered && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 4, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 3, scale: 0.95 }}
-                    transition={{ duration: 0.15, ease: 'easeOut' }}
-                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none whitespace-nowrap"
-                  >
-                    <div className="bg-[#1c1c1f] border border-[#38383c] text-white text-xs font-medium px-2.5 py-1 rounded-md shadow-xl shadow-black/80 flex items-center justify-center">
-                      <span>Ghost Mode</span>
-                    </div>
-                    {/* Tooltip arrow pointer */}
-                    <div className="w-1.5 h-1.5 bg-[#1c1c1f] border-r border-b border-[#38383c] rotate-45 mx-auto -mt-1 shadow-sm" />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                {/* Hover Tooltip: Ghost Mode */}
+                <AnimatePresence>
+                  {isGhostHovered && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 3, scale: 0.95 }}
+                      transition={{ duration: 0.15, ease: 'easeOut' }}
+                      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none whitespace-nowrap"
+                    >
+                      <div className="bg-[#1c1c1f] border border-[#38383c] text-white text-xs font-medium px-2.5 py-1 rounded-md shadow-xl shadow-black/80 flex items-center justify-center">
+                        <span>Ghost Mode</span>
+                      </div>
+                      {/* Tooltip arrow pointer */}
+                      <div className="w-1.5 h-1.5 bg-[#1c1c1f] border-r border-b border-[#38383c] rotate-45 mx-auto -mt-1 shadow-sm" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-2 flex-shrink-0">

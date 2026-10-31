@@ -1,7 +1,24 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Project, ProjectFile } from '../types';
-import { Upload, Github, Folder, FolderOpen, X, FileCode2, FileText, Check, Plus, ArrowLeft, ChevronDown } from 'lucide-react';
+import { 
+  Upload, 
+  Github, 
+  Folder, 
+  FolderOpen, 
+  X, 
+  FileCode2, 
+  FileText, 
+  Check, 
+  Plus, 
+  ArrowLeft, 
+  ChevronDown,
+  Search,
+  Eye,
+  Trash2,
+  MoreVertical,
+  Copy
+} from 'lucide-react';
 
 interface ProjectDetailsViewProps {
   key?: React.Key;
@@ -65,6 +82,66 @@ function getFileTokens(file: { tokens?: number | string; size?: string; content?
   return '250 tokens';
 }
 
+const KNOWN_COMMITS: Record<string, { commit: string; time: string }> = {
+  'screenshots': { commit: 'README: Prune dead upstream links and fork-irrelevant s...', time: '3 weeks ago' },
+  'scripts': { commit: 'feat(skill): php2shell - gated session.upload_progress LFI-...', time: 'last week' },
+  'server': { commit: 'fix(ollama): keyless env config and /v1 base URL normaliz...', time: '5 days ago' },
+  'sidequestion': { commit: 'Translate all Chinese text to English', time: '3 weeks ago' },
+  'skills': { commit: 'feat(skills): bbot recursive recon orchestrator with policy ...', time: 'last week' },
+  'traffic': { commit: 'Traffic ingest: capture operator browsing via a browser ex...', time: '3 weeks ago' },
+  'web': { commit: 'ollama llm', time: 'last week' },
+  '.dockerignore': { commit: 'chore(bench): 补 .dockerignore 忽略项, bench 容器不再挂...', time: 'last month' },
+  '.env.example': { commit: 'Translate all Chinese text to English', time: '3 weeks ago' },
+  '.gitattributes': { commit: 'fix(script): start.bat 改用 CRLF 并切 UTF-8 代码页', time: 'last month' },
+  '.gitignore': { commit: 'merge main (resolve .gitignore: keep both entries)', time: '3 weeks ago' },
+  'ControlPanel.tsx': { commit: 'feat(ui): add interactive control panel and state handlers', time: '5 days ago' },
+  'DataPanel.tsx': { commit: 'feat(telemetry): stream telemetry metrics and health checks', time: 'last week' },
+  'globals.css': { commit: 'style: update base Tailwind tokens and root color scheme', time: '3 weeks ago' },
+  'layout.tsx': { commit: 'chore(layout): wrap root tree with metadata and providers', time: 'last month' },
+  'page.tsx': { commit: 'feat(page): mount client control interface', time: '3 weeks ago' },
+  'main.py': { commit: 'fix(ollama): keyless env config and /v1 base URL normaliz...', time: '5 days ago' },
+  'test_orchestrator.py': { commit: 'test: add unit test coverage for hypervisor orchestrator', time: 'last month' },
+  'utils.py': { commit: 'refactor(crypto): export sha256 hashing helper', time: 'last month' },
+};
+
+function getFileCommitMessage(file: ProjectFile, index: number): string {
+  if (file.commitMessage) return file.commitMessage;
+  if (KNOWN_COMMITS[file.name]) return KNOWN_COMMITS[file.name].commit;
+  const ext = getFileExtension(file.name).toLowerCase();
+  if (ext === 'tsx' || ext === 'jsx') return `feat(ui): implement ${file.name.replace(/\.[^/.]+$/, '')} component`;
+  if (ext === 'ts' || ext === 'js') return `feat: implement logic and exports in ${file.name}`;
+  if (ext === 'py') return `refactor: update runtime handlers in ${file.name}`;
+  if (ext === 'css') return `style: update stylesheets in ${file.name}`;
+  if (ext === 'md') return `docs: update documentation and schema`;
+  if (ext === 'json') return `chore: update configuration schemas`;
+  if (file.name.startsWith('.')) return `chore: update dotfile ${file.name}`;
+  return `update ${file.name}`;
+}
+
+function getFileTimeAgo(file: ProjectFile, index: number): string {
+  if (file.timeAgo) return file.timeAgo;
+  if (KNOWN_COMMITS[file.name]) return KNOWN_COMMITS[file.name].time;
+  const times = ['5 days ago', 'last week', '3 weeks ago', 'last month', '2 months ago'];
+  return times[index % times.length];
+}
+
+function renderFileIcon(name: string, type: 'file' | 'folder' = 'file') {
+  if (type === 'folder' || (!name.includes('.') && !name.startsWith('.'))) {
+    return (
+      <Folder 
+        size={16} 
+        className="text-zinc-400 flex-shrink-0" 
+        strokeWidth={2}
+      />
+    );
+  }
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (ext === 'tsx' || ext === 'jsx' || ext === 'ts' || ext === 'js' || ext === 'py') {
+    return <FileCode2 size={16} className="text-zinc-400 flex-shrink-0" strokeWidth={2} />;
+  }
+  return <FileText size={16} className="text-zinc-400 flex-shrink-0" strokeWidth={2} />;
+}
+
 const DEFAULT_SYNC_FILES: ProjectFile[] = [
   {
     id: 'sync-changelog',
@@ -93,7 +170,18 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
   const [isInstructionsExpanded, setIsInstructionsExpanded] = useState(true);
   const [isInstructionsSaved, setIsInstructionsSaved] = useState(false);
   const [instructionsInput, setInstructionsInput] = useState(project.instructions || '');
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCopyContent = () => {
+    if (selectedFile?.content) {
+      navigator.clipboard.writeText(selectedFile.content);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    }
+  };
 
   const handleSaveInstructions = () => {
     onUpdateProject(project.id, { instructions: instructionsInput.trim() });
@@ -185,14 +273,126 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
   };
 
   const handleConfirmGithubImport = () => {
-    // Import repository sample files if imported
+    // Import repository sample files matching GitHub screenshot & project files
     const sampleRepoFiles: ProjectFile[] = [
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: 'screenshots',
+        type: 'folder',
+        tokens: 450,
+        size: '450 tokens',
+        commitMessage: 'README: Prune dead upstream links and fork-irrelevant s...',
+        timeAgo: '3 weeks ago',
+        content: '# Screenshots and asset directory'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: 'scripts',
+        type: 'folder',
+        tokens: 1800,
+        size: '1.8k tokens',
+        commitMessage: 'feat(skill): php2shell - gated session.upload_progress LFI-...',
+        timeAgo: 'last week',
+        content: '# Deployment and maintenance automation scripts'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: 'server',
+        type: 'folder',
+        tokens: 3400,
+        size: '3.4k tokens',
+        commitMessage: 'fix(ollama): keyless env config and /v1 base URL normaliz...',
+        timeAgo: '5 days ago',
+        content: '# Backend server and API proxy routing'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: 'sidequestion',
+        type: 'folder',
+        tokens: 620,
+        size: '620 tokens',
+        commitMessage: 'Translate all Chinese text to English',
+        timeAgo: '3 weeks ago',
+        content: '# Side question handling module'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: 'skills',
+        type: 'folder',
+        tokens: 4200,
+        size: '4.2k tokens',
+        commitMessage: 'feat(skills): bbot recursive recon orchestrator with policy ...',
+        timeAgo: 'last week',
+        content: '# Autonomous agent skill orchestrators'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: 'traffic',
+        type: 'folder',
+        tokens: 950,
+        size: '950 tokens',
+        commitMessage: 'Traffic ingest: capture operator browsing via a browser ex...',
+        timeAgo: '3 weeks ago',
+        content: '# Traffic capture pipeline and network ingest'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: 'web',
+        type: 'folder',
+        tokens: 2800,
+        size: '2.8k tokens',
+        commitMessage: 'ollama llm',
+        timeAgo: 'last week',
+        content: '# Frontend web client application'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: '.dockerignore',
+        type: 'file',
+        tokens: 85,
+        size: '85 tokens',
+        commitMessage: 'chore(bench): 补 .dockerignore 忽略项, bench 容器不再挂...',
+        timeAgo: 'last month',
+        content: 'node_modules\n.git\n.env\n*.log\ndist'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: '.env.example',
+        type: 'file',
+        tokens: 110,
+        size: '110 tokens',
+        commitMessage: 'Translate all Chinese text to English',
+        timeAgo: '3 weeks ago',
+        content: 'API_KEY=your_key_here\nDATABASE_URL=postgres://localhost:5432/app\nPORT=3000'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: '.gitattributes',
+        type: 'file',
+        tokens: 65,
+        size: '65 tokens',
+        commitMessage: 'fix(script): start.bat 改用 CRLF 并切 UTF-8 代码页',
+        timeAgo: 'last month',
+        content: '* text=auto eol=lf\n*.bat text eol=crlf'
+      },
+      {
+        id: Math.random().toString(36).substring(2, 11),
+        name: '.gitignore',
+        type: 'file',
+        tokens: 95,
+        size: '95 tokens',
+        commitMessage: 'merge main (resolve .gitignore: keep both entries)',
+        timeAgo: '3 weeks ago',
+        content: 'node_modules/\ndist/\n.env\n.DS_Store'
+      },
       {
         id: Math.random().toString(36).substring(2, 11),
         name: 'ControlPanel.tsx',
         type: 'file',
         tokens: 1150,
         size: '1.2k tokens',
+        commitMessage: 'feat(ui): add interactive control panel and state handlers',
+        timeAgo: '5 days ago',
         content: `import React, { useState } from 'react';\n\nexport default function ControlPanel() {\n  const [status, setStatus] = useState('active');\n  return (\n    <div className="control-panel">\n      <h2>Control Panel</h2>\n      <p>System state: {status}</p>\n    </div>\n  );\n}`
       },
       {
@@ -201,6 +401,8 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
         type: 'file',
         tokens: 1400,
         size: '1.4k tokens',
+        commitMessage: 'feat(telemetry): stream telemetry metrics and health checks',
+        timeAgo: 'last week',
         content: `import React from 'react';\n\nexport function DataPanel({ telemetry }: { telemetry: Record<string, number> }) {\n  return (\n    <div className="data-panel">\n      <h3>Telemetry Metrics</h3>\n    </div>\n  );\n}`
       },
       {
@@ -209,6 +411,8 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
         type: 'file',
         tokens: 122,
         size: '122 tokens',
+        commitMessage: 'style: update base Tailwind tokens and root color scheme',
+        timeAgo: '3 weeks ago',
         content: `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n:root {\n  --bg-primary: #121212;\n  --text-main: #f4f4f5;\n}`
       },
       {
@@ -217,6 +421,8 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
         type: 'file',
         tokens: 175,
         size: '175 tokens',
+        commitMessage: 'chore(layout): wrap root tree with metadata and providers',
+        timeAgo: 'last month',
         content: `export default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang="en">\n      <body>{children}</body>\n    </html>\n  );\n}`
       },
       {
@@ -225,6 +431,8 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
         type: 'file',
         tokens: 3800,
         size: '3.8k tokens',
+        commitMessage: 'feat(page): mount client control interface',
+        timeAgo: '3 weeks ago',
         content: `'use client';\n\nimport React from 'react';\nimport ControlPanel from './ControlPanel';\n\nexport default function Page() {\n  return (\n    <main className="min-h-screen p-8">\n      <ControlPanel />\n    </main>\n  );\n}`
       },
       {
@@ -233,6 +441,8 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
         type: 'file',
         tokens: 3400,
         size: '3.4k tokens',
+        commitMessage: 'fix(ollama): keyless env config and /v1 base URL normaliz...',
+        timeAgo: '5 days ago',
         content: `"""\nHypervisor Daemon Core\n"""\nimport logging\n\ndef run():\n    logging.info("Core orchestrator initialized")\n\nif __name__ == "__main__":\n    run()`
       },
       {
@@ -241,6 +451,8 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
         type: 'file',
         tokens: 5125,
         size: '5.1k tokens',
+        commitMessage: 'test: add unit test coverage for hypervisor orchestrator',
+        timeAgo: 'last month',
         content: `import unittest\n\nclass TestOrchestration(unittest.TestCase):\n    def test_startup(self):\n        self.assertTrue(True)`
       },
       {
@@ -249,6 +461,8 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
         type: 'file',
         tokens: 198,
         size: '198 tokens',
+        commitMessage: 'refactor(crypto): export sha256 hashing helper',
+        timeAgo: 'last month',
         content: `import hashlib\n\ndef hash_string(val: str) -> str:\n    return hashlib.sha256(val.encode()).hexdigest()`
       }
     ];
@@ -262,9 +476,135 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
     setGithubRepoInput('');
   };
 
+  const filteredFiles = useMemo(() => {
+    if (!searchQuery.trim()) return files;
+    const q = searchQuery.toLowerCase();
+    return files.filter(f => 
+      f.name.toLowerCase().includes(q) || 
+      (f.commitMessage && f.commitMessage.toLowerCase().includes(q))
+    );
+  }, [files, searchQuery]);
+
+  const totalTokens = useMemo(() => {
+    return files.reduce((acc, f) => {
+      if (typeof f.tokens === 'number') return acc + f.tokens;
+      if (f.content) return acc + Math.max(1, Math.ceil(f.content.length / 4));
+      return acc + 250;
+    }, 0);
+  }, [files]);
+
+  if (selectedFile) {
+    const fileLines = selectedFile.content ? selectedFile.content.split('\n') : [];
+    const ext = getFileExtension(selectedFile.name);
+
+    return (
+      <div className="flex-1 flex flex-col h-full bg-[#151515] text-[#e4e4e7] overflow-y-auto no-scrollbar">
+        <div className="max-w-6xl w-full mx-auto px-6 sm:px-8 py-8 flex flex-col min-h-full">
+          {/* Header Row */}
+          <div className="flex items-center justify-between gap-4 mb-8">
+            {/* Breadcrumb Navigation: <- Projects / {ProjectName} / {FileName} */}
+            <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+              <button 
+                type="button"
+                onClick={() => setSelectedFile(null)}
+                className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer group text-2xl font-serif shrink-0 mr-1"
+                title={`Back to ${name}`}
+              >
+                <ArrowLeft size={19} className="text-zinc-400 group-hover:text-zinc-100 transition-transform group-hover:-translate-x-0.5" />
+              </button>
+
+              <button 
+                type="button"
+                onClick={onBack}
+                className="text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer text-2xl font-serif"
+                title="Back to Projects"
+              >
+                Projects
+              </button>
+
+              <span className="text-zinc-600 select-none text-2xl font-serif">/</span>
+
+              <button 
+                type="button"
+                onClick={() => setSelectedFile(null)}
+                className="text-zinc-400 hover:text-zinc-100 transition-colors cursor-pointer text-2xl font-serif truncate max-w-[200px]"
+                title={`Back to ${name}`}
+              >
+                {name}
+              </button>
+
+              <span className="text-zinc-600 select-none text-2xl font-serif">/</span>
+
+              <span className="text-zinc-100 text-2xl font-serif truncate max-w-[320px]">
+                {selectedFile.name}
+              </span>
+            </div>
+
+            {/* Right Toolbar Actions */}
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-[#202020] text-zinc-400 border border-[#2c2c2c]">
+                {getFileTokens(selectedFile)}
+              </span>
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#202020] text-zinc-400 border border-[#2c2c2c]">
+                {ext}
+              </span>
+              <button 
+                type="button"
+                onClick={handleCopyContent}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#202020] hover:bg-[#282828] border border-[#2e2e2e] hover:border-[#3a3a3a] text-zinc-300 hover:text-white rounded-full text-xs font-medium transition-colors cursor-pointer"
+                title="Copy file contents"
+              >
+                {isCopied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                <span>{isCopied ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Code Content Area (Full Screen matching exact border/padding) */}
+          <div className="flex-1 flex flex-col bg-[#181818] border border-[#262626] rounded-xl overflow-hidden shadow-xs pb-4">
+            {/* Sub-header with line count and file info */}
+            <div className="flex items-center justify-between px-5 py-3 bg-[#161616] border-b border-[#262626] text-xs text-zinc-400">
+              <div className="flex items-center gap-2.5">
+                <FileCode2 size={15} className="text-zinc-400" />
+                <span className="font-mono text-zinc-300 font-medium">{selectedFile.name}</span>
+              </div>
+              <span className="font-mono text-zinc-500">
+                {fileLines.length} {fileLines.length === 1 ? 'line' : 'lines'}
+              </span>
+            </div>
+
+            {/* Code Body with Line Numbers */}
+            <div className="flex-1 overflow-x-auto p-4 sm:p-5 font-mono text-xs leading-relaxed select-text bg-[#141414]">
+              {selectedFile.content ? (
+                <table className="border-collapse w-full">
+                  <tbody>
+                    {fileLines.map((line, idx) => (
+                      <tr key={idx} className="hover:bg-[#1a1a1a]/80 transition-colors">
+                        <td className="text-zinc-600 select-none text-right pr-4 pl-1 w-12 align-top text-[11px] border-r border-[#222]">
+                          {idx + 1}
+                        </td>
+                        <td className="text-zinc-200 whitespace-pre align-top select-text pl-4">
+                          {line || '\n'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-zinc-600 italic py-20 text-center">
+                  // No text content available for this file
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#141414] text-[#e4e4e7] overflow-y-auto no-scrollbar">
-      <div className="max-w-5xl w-full mx-auto px-5 sm:px-8 py-7 flex flex-col min-h-full">
+    <div className="flex-1 flex flex-col h-full bg-[#151515] text-[#e4e4e7] overflow-y-auto no-scrollbar">
+      <div className="max-w-6xl w-full mx-auto px-6 sm:px-8 py-8 flex flex-col min-h-full">
         
         {/* Project Header */}
         <div className="flex flex-col gap-3 mb-8">
@@ -479,33 +819,46 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
           </div>
         </div>
 
-        {/* Files Section - Clean and Modern */}
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
-            <div className="flex items-center gap-2">
+        {/* Files Section - History Listing Layout */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3 pb-2">
+            <div className="flex items-center gap-2.5">
               <h2 className="text-sm font-medium text-zinc-200">Files</h2>
               <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#202020] text-zinc-400 border border-[#2c2c2c]">
                 {files.length}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="relative group">
+                <Search size={15} strokeWidth={2} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-zinc-300 transition-colors" />
+                <input 
+                  type="text" 
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search files..."
+                  className="bg-[#222] border border-[#333] rounded-full py-1.5 pl-9 pr-4 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-all w-[150px] sm:w-[200px]"
+                />
+              </div>
+
               <button 
                 type="button"
                 onClick={handleImportGithub}
-                className="flex items-center gap-1.5 bg-[#1f1f1f] hover:bg-[#272727] border border-[#2d2d2d] hover:border-[#3d3d3d] text-zinc-200 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer shadow-xs"
+                className="flex items-center gap-1.5 bg-[#222] border border-[#333] hover:bg-[#2c2c2c] transition-colors rounded-full px-3.5 py-1.5 text-xs text-zinc-300 cursor-pointer"
+                title="Import files from GitHub repository"
               >
-                <Github size={13} />
-                <span>Import from GitHub</span>
+                <Github size={13} strokeWidth={2} />
+                <span>Import</span>
               </button>
               
               <button 
                 type="button"
                 onClick={handleTriggerUpload}
-                className="flex items-center gap-1.5 bg-[#1f1f1f] hover:bg-[#272727] border border-[#2d2d2d] hover:border-[#3d3d3d] text-zinc-200 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer shadow-xs"
+                className="flex items-center gap-1.5 bg-zinc-100 hover:bg-white text-zinc-900 font-medium px-3.5 py-1.5 rounded-full text-xs transition-colors cursor-pointer shadow-xs"
+                title="Upload files"
               >
-                <Upload size={13} />
-                <span>Upload Files</span>
+                <Upload size={13} strokeWidth={2} />
+                <span>Upload</span>
               </button>
 
               <input 
@@ -518,128 +871,91 @@ export default function ProjectDetailsView({ project, onBack, onUpdateProject, o
             </div>
           </div>
 
-          {/* Files Grid / Empty State */}
-          <div className="pt-0.5">
-            {files.length === 0 ? (
-              <div 
-                onClick={handleTriggerUpload}
-                className="h-[100px] w-full rounded-xl border border-dashed border-[#282828] hover:border-[#3a3a3a] bg-[#161616]/50 flex flex-col items-center justify-center p-4 text-center cursor-pointer transition-colors group"
-              >
-                <Folder size={18} className="text-zinc-600 group-hover:text-zinc-400 mb-1 transition-colors" />
-                <p className="text-xs text-zinc-400 font-medium">No files in project</p>
-                <p className="text-[10px] text-zinc-600 mt-0.5">Click to upload files or import from GitHub</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-                {files.map(file => {
-                  const ext = getFileExtension(file.name);
-                  return (
-                    <div 
-                      key={file.id}
-                      onClick={() => setSelectedFile(file)}
-                      className="relative group bg-[#181818] hover:bg-[#202020] border border-[#262626] hover:border-[#363636] rounded-xl p-3 flex flex-col justify-between h-[104px] transition-all cursor-pointer select-none"
-                    >
-                      {/* Top: File name & token count */}
-                      <div className="flex flex-col min-w-0 pr-4">
-                        <span 
-                          className="text-xs font-medium text-zinc-200 truncate group-hover:text-white transition-colors"
-                          title={file.name}
-                        >
-                          {file.name}
-                        </span>
-                        <span className="text-[10px] text-zinc-500 font-mono mt-0.5">
-                          {getFileTokens(file)}
-                        </span>
-                      </div>
-
-                      {/* Bottom: Extension badge */}
-                      <div className="flex items-center justify-between mt-auto pt-1.5">
-                        <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#1f1f1f] border border-[#2d2d2d] text-zinc-400 tracking-wider">
-                          {ext}
-                        </span>
-                      </div>
-
-                      {/* Hover X icon to delete file */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteFile(file.id);
-                        }}
-                        className="absolute top-2 right-2 w-5 h-5 rounded-md hover:bg-[#2a2a2a] text-zinc-500 hover:text-zinc-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-10"
-                        title="Remove file"
-                      >
-                        <X size={11} strokeWidth={2} />
-                      </button>
+          {/* Files List - Exact History Listing Layout */}
+          {filteredFiles.length === 0 ? (
+            <div 
+              onClick={handleTriggerUpload}
+              className="py-12 text-center text-zinc-500 text-sm cursor-pointer hover:text-zinc-400 transition-colors"
+            >
+              {searchQuery ? `No files matching "${searchQuery}"` : 'No files in this project. Click to upload.'}
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {filteredFiles.map((file, idx) => {
+                const timeAgo = getFileTimeAgo(file, idx);
+                return (
+                  <div 
+                    key={file.id}
+                    className="group flex items-center justify-between py-3.5 border-b border-[#222] hover:bg-[#1a1a1a] px-4 -mx-4 rounded-xl cursor-pointer transition-colors"
+                    onClick={() => setSelectedFile(file)}
+                    onMouseLeave={() => {
+                      if (activeMenuId === file.id) setActiveMenuId(null);
+                    }}
+                  >
+                    <div className="flex items-center gap-3 overflow-hidden min-w-0 pr-4">
+                      {renderFileIcon(file.name, file.type)}
+                      <span className="text-zinc-300 font-medium truncate text-[15px] group-hover:text-zinc-100 transition-colors">
+                        {file.name}
+                      </span>
+                      <span className="text-[11px] font-mono text-zinc-500 shrink-0">
+                        {getFileTokens(file)}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+
+                    <div className="flex items-center relative shrink-0" onClick={e => e.stopPropagation()}>
+                      <span className={`text-sm text-zinc-500 transition-opacity ${activeMenuId === file.id ? 'opacity-0' : 'opacity-100 group-hover:opacity-0'}`}>
+                        {timeAgo}
+                      </span>
+
+                      <button 
+                        type="button"
+                        onClick={() => setActiveMenuId(activeMenuId === file.id ? null : file.id)}
+                        className={`absolute right-0 p-1.5 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-[#333] transition-all cursor-pointer ${
+                          activeMenuId === file.id ? 'opacity-100 bg-[#333] text-zinc-200' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                        title="Options"
+                      >
+                        <MoreVertical size={18} strokeWidth={2} />
+                      </button>
+
+                      {activeMenuId === file.id && (
+                        <div className="absolute right-0 top-full mt-1 bg-[#222] border border-[#333] rounded-lg shadow-xl shadow-black/50 py-1 w-36 z-20 flex flex-col animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedFile(file);
+                              setActiveMenuId(null);
+                            }}
+                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300 hover:bg-[#333] hover:text-white text-left transition-colors cursor-pointer"
+                          >
+                            <Eye size={14} strokeWidth={2} />
+                            View file
+                          </button>
+                          <div className="h-px bg-[#333] my-1 mx-2" />
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteFile(file.id);
+                              setActiveMenuId(null);
+                            }}
+                            className="flex items-center gap-2.5 px-3 py-2 text-sm text-rose-400 hover:bg-[#333] hover:text-rose-300 text-left transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={14} strokeWidth={2} />
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
       </div>
-
-      {/* File Content Popup Modal */}
-      {selectedFile && (
-        <div 
-          className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
-          onClick={() => setSelectedFile(null)}
-        >
-          <div 
-            className="bg-[#1a1a1a] border border-[#2e2e2e] rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#282828] bg-[#161616]">
-              <div className="flex items-center gap-2.5 min-w-0 pr-3">
-                <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#202020] border border-[#333] text-zinc-400">
-                  {getFileExtension(selectedFile.name)}
-                </span>
-                <span className="text-sm font-medium text-zinc-200 truncate">
-                  {selectedFile.name}
-                </span>
-                <span className="text-xs text-zinc-500 font-mono">
-                  {getFileTokens(selectedFile)}
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedFile(null)}
-                className="p-1.5 rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-[#282828] transition-colors cursor-pointer"
-                title="Close"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-4 bg-[#141414] font-mono text-xs leading-relaxed text-zinc-300 whitespace-pre no-scrollbar select-text">
-              {selectedFile.content ? (
-                selectedFile.content
-              ) : (
-                <div className="text-zinc-600 italic py-6 text-center">
-                  // No text content available for this file
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between px-5 py-2.5 border-t border-[#262626] bg-[#161616] text-xs text-zinc-500">
-              <span>{selectedFile.content ? `${selectedFile.content.split('\n').length} lines` : '0 lines'}</span>
-              <button
-                type="button"
-                onClick={() => setSelectedFile(null)}
-                className="px-4 py-1.5 bg-[#222] hover:bg-[#2a2a2a] border border-[#333] text-zinc-300 hover:text-white rounded-full text-sm font-medium transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* GitHub Import Modal */}
       {isImportModalOpen && (
