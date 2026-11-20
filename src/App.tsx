@@ -24,7 +24,134 @@ export default function App() {
   const [loadedSkill, setLoadedSkill] = useState<Skill | null>(null);
   const [loadedAgent, setLoadedAgent] = useState<Agent | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('cisai-lite');
-  const [chats, setChats] = useState<ChatSession[]>([]);
+  const [chats, setChats] = useState<ChatSession[]>([
+    {
+      id: 'chat-rbac-system',
+      title: 'Full-Stack RBAC & Auth Architecture',
+      updatedAt: Date.now() - 3600000 * 2,
+      isFlagged: false,
+      uploads: [
+        {
+          id: 'up-1',
+          name: 'system-spec.pdf',
+          size: '248.5 KB',
+          type: 'application/pdf',
+          uploadedAt: Date.now() - 3600000 * 2,
+          content: 'Technical Specification: Role-Based Access Control Architecture\n- User roles: Admin, Auditor, Engineer, Guest\n- Token issuance: JWT RS256 with 15m expiration\n- Refresh token rotation in HTTP-only secure cookie'
+        },
+        {
+          id: 'up-2',
+          name: 'security-requirements.md',
+          size: '14.2 KB',
+          type: 'text/markdown',
+          uploadedAt: Date.now() - 3600000 * 2,
+          content: '# Security Invariants\n1. All admin mutation routes require explicit MFA challenge.\n2. Revocation list checked via redis cache.'
+        }
+      ],
+      todos: [
+        {
+          id: 'td-1',
+          title: 'Define User & Role models in database schema',
+          completed: true,
+          stepNumber: 1,
+          description: 'Prisma models with composite indices on tenant_id + role_id'
+        },
+        {
+          id: 'td-2',
+          title: 'Implement password hashing & JWT token issuance',
+          completed: true,
+          stepNumber: 2,
+          description: 'Argon2id password hashing with RS256 JWT key signing'
+        },
+        {
+          id: 'td-3',
+          title: 'Add role-based access control (RBAC) middleware',
+          completed: false,
+          stepNumber: 3,
+          description: 'Express permission guard verifying user capabilities'
+        },
+        {
+          id: 'td-4',
+          title: 'Write end-to-end authentication test suites',
+          completed: false,
+          stepNumber: 4,
+          description: 'Playwright & Vitest integration suites for auth matrix'
+        }
+      ],
+      deliverables: [
+        {
+          id: 'deliv-1',
+          name: 'auth.controller.ts',
+          type: 'typescript',
+          size: '142 lines',
+          content: `import { Request, Response } from 'express';\nimport { AuthService } from '../services/auth.service';\n\nexport class AuthController {\n  static async login(req: Request, res: Response) {\n    const { email, password } = req.body;\n    const session = await AuthService.authenticate(email, password);\n    res.cookie('token', session.token, { httpOnly: true, secure: true });\n    return res.json({ user: session.user });\n  }\n\n  static async logout(_req: Request, res: Response) {\n    res.clearCookie('token');\n    return res.status(204).send();\n  }\n}`,
+          timestamp: Date.now() - 3600000 * 2
+        },
+        {
+          id: 'deliv-2',
+          name: 'rbac.middleware.ts',
+          type: 'typescript',
+          size: '88 lines',
+          content: `import { Request, Response, NextFunction } from 'express';\n\nexport function requirePermission(permission: string) {\n  return (req: Request, res: Response, next: NextFunction) => {\n    const userPermissions = (req as any).user?.permissions || [];\n    if (!userPermissions.includes(permission)) {\n      return res.status(403).json({ error: 'Forbidden: Insufficient capabilities' });\n    }\n    next();\n  };\n}`,
+          timestamp: Date.now() - 3600000 * 2
+        },
+        {
+          id: 'deliv-3',
+          name: 'schema.prisma',
+          type: 'prisma',
+          size: '64 lines',
+          content: `model User {\n  id           String   @id @default(uuid())\n  email        String   @unique\n  passwordHash String\n  roleId       String\n  role         Role     @relation(fields: [roleId], references: [id])\n  createdAt    DateTime @default(now())\n}\n\nmodel Role {\n  id          String   @id @default(uuid())\n  name        String   @unique\n  permissions String[]\n  users       User[]\n}`,
+          timestamp: Date.now() - 3600000 * 2
+        }
+      ],
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: 'I have attached our security requirements and architecture specification. Please design our RBAC system, organize the execution plan into clear steps, and deliver the core middleware and controllers.\n\n[Attached: system-spec.pdf (248.5 KB)] [Attached: security-requirements.md (14.2 KB)]',
+          timestamp: Date.now() - 3600000 * 2
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: `I've analyzed **system-spec.pdf** and **security-requirements.md**. Here is the multi-step implementation plan for your RBAC system:
+
+- [x] Step 1: Define User & Role models in database schema
+- [x] Step 2: Implement password hashing & JWT token issuance
+- [ ] Step 3: Add role-based access control (RBAC) middleware
+- [ ] Step 4: Write end-to-end authentication test suites
+
+I have prepared the first set of deliverables for you:
+- \`auth.controller.ts\` (Login/logout endpoints with secure HTTP-only cookies)
+- \`rbac.middleware.ts\` (Permission guard and authorization matrix)
+- \`schema.prisma\` (Database schema with User and Role definitions)
+
+Check the "In this Chat" panel on the right to view your uploaded files, monitor todo progress, and inspect delivered files.`,
+          timestamp: Date.now() - 3600000 * 2 + 1000
+        }
+      ]
+    },
+    {
+      id: 'chat-simple-query',
+      title: 'Python List Comprehensions vs Generators',
+      updatedAt: Date.now() - 86400000,
+      isFlagged: false,
+      messages: [
+        {
+          id: 'msg-simple-1',
+          role: 'user',
+          content: 'What is the key difference between list comprehensions and generator expressions in Python?',
+          timestamp: Date.now() - 86400000
+        },
+        {
+          id: 'msg-simple-2',
+          role: 'assistant',
+          content: 'The key difference is memory usage and evaluation time:\n\n1. **List comprehension** `[x for x in data]` computes all elements immediately and stores the entire list in memory.\n2. **Generator expression** `(x for x in data)` produces elements lazily on demand using the iterator protocol, maintaining constant memory overhead.',
+          timestamp: Date.now() - 86400000 + 1000
+        }
+      ]
+    }
+  ]);
   const [projects, setProjects] = useState<Project[]>([
     {
       id: generateId(),
@@ -459,7 +586,26 @@ export default function App() {
     ));
   };
 
-  const handleSendMessage = (content: string, isGhostMode?: boolean) => {
+  const handleToggleTodo = (chatId: string, todoId: string) => {
+    setChats(prev => prev.map(chat => {
+      if (chat.id === chatId) {
+        const updatedTodos = (chat.todos || []).map(t => 
+          t.id === todoId ? { ...t, completed: !t.completed } : t
+        );
+        return {
+          ...chat,
+          todos: updatedTodos
+        };
+      }
+      return chat;
+    }));
+  };
+
+  const handleSendMessage = (
+    content: string, 
+    isGhostMode?: boolean,
+    attachments?: { id: string; name: string; size: number | string }[]
+  ) => {
     const projectPayload = loadedProject ? formatProjectContent(loadedProject) : '';
     const skillPayload = loadedSkill ? formatSkillContent(loadedSkill) : '';
 
@@ -468,11 +614,19 @@ export default function App() {
     if (skillPayload) payloads.push(skillPayload);
     const fullContent = payloads.length > 0 ? `${payloads.join('\n\n')}\n\n${content}` : content;
 
+    const userAttachments = attachments && attachments.length > 0 ? attachments.map(a => ({
+      id: a.id,
+      name: a.name,
+      size: typeof a.size === 'number' ? `${(a.size / 1024).toFixed(1)} KB` : a.size,
+      uploadedAt: Date.now()
+    })) : undefined;
+
     const userMessage: Message = {
       id: generateId(),
       role: 'user',
       content: fullContent,
       displayText: content,
+      attachments: userAttachments,
       projectContext: loadedProject ? {
         projectId: loadedProject.id,
         projectName: loadedProject.name,
@@ -488,6 +642,12 @@ export default function App() {
 
     // Assistant response
     let assistantText = "I'm a simulated agent response based on your prompt. I can assist you with coding, writing, analysis, and much more.";
+    let assistantTodos: any[] | undefined;
+    let assistantDeliverables: any[] | undefined;
+
+    const lower = content.toLowerCase();
+    const needsPlan = lower.includes('plan') || lower.includes('step') || lower.includes('todo') || lower.includes('build') || lower.includes('design') || (userAttachments && userAttachments.length > 0);
+
     if (loadedAgent) {
       if (loadedAgent.name.toLowerCase().includes('hypervisor')) {
         assistantText = `**${loadedAgent.name} Core Activated**\n\nI have initialized the security telemetry and vulnerability analysis engine. System architecture analyzed. How can I assist with your penetration testing, threat modeling, or exploit defense assessment?`;
@@ -496,6 +656,23 @@ export default function App() {
       } else {
         assistantText = `**${loadedAgent.name} Loaded**\n\nI am operating under the instructions and specialized configuration for ${loadedAgent.name}.\n\nHow can I assist you with your request today?`;
       }
+    } else if (needsPlan) {
+      assistantTodos = [
+        { id: generateId(), title: 'Analyze requirements and dependencies', completed: true, stepNumber: 1, description: 'Reviewed specifications and context parameters' },
+        { id: generateId(), title: 'Implement architecture core and state handlers', completed: false, stepNumber: 2, description: 'Engine logic and integration pathways' },
+        { id: generateId(), title: 'Validate edge-case behaviors and telemetry', completed: false, stepNumber: 3, description: 'Continuous assurance and test validation' }
+      ];
+      assistantDeliverables = [
+        {
+          id: generateId(),
+          name: 'solution_artifact.ts',
+          type: 'typescript',
+          size: '48 lines',
+          content: `// Solution artifact generated for: ${content.slice(0, 35)}...\nexport class SolutionEngine {\n  constructor(private config: Record<string, unknown> = {}) {}\n\n  async execute() {\n    console.log("Solution engine executing workflow");\n    return { status: "success", timestamp: Date.now() };\n  }\n}`,
+          timestamp: Date.now()
+        }
+      ];
+      assistantText = `I have reviewed your request${userAttachments ? ` and processed the attached file(s)` : ''}.\n\n### Execution Plan:\n- [x] Step 1: Analyze requirements and dependencies\n- [ ] Step 2: Implement architecture core and state handlers\n- [ ] Step 3: Validate edge-case behaviors and telemetry\n\n### Deliverables:\n- \`solution_artifact.ts\` (Generated implementation)\n\nCheck the "In this Chat" panel on the right side to view your uploads, monitor todos, and inspect deliverables.`;
     } else if (loadedProject && loadedSkill) {
       assistantText = `I have loaded both the **${loadedProject.name}** project and the **${loadedSkill.name}** skill. How can I assist you?`;
     } else if (loadedProject) {
@@ -508,6 +685,8 @@ export default function App() {
       id: generateId(),
       role: 'assistant',
       content: assistantText,
+      todos: assistantTodos,
+      deliverables: assistantDeliverables,
       timestamp: Date.now() + 1000
     };
 
@@ -520,7 +699,10 @@ export default function App() {
         messages: [userMessage, assistantMessage],
         agentId: loadedAgent?.id,
         agentName: loadedAgent?.name,
-        isGhost: isGhostMode
+        isGhost: isGhostMode,
+        uploads: userAttachments ? [...userAttachments] : [],
+        todos: assistantTodos ? [...assistantTodos] : [],
+        deliverables: assistantDeliverables ? [...assistantDeliverables] : []
       };
       setChats(prev => [newChat, ...prev]);
       setActiveChatId(newChat.id);
@@ -531,7 +713,10 @@ export default function App() {
           return {
             ...c,
             updatedAt: Date.now(),
-            messages: [...c.messages, userMessage, assistantMessage]
+            messages: [...c.messages, userMessage, assistantMessage],
+            uploads: userAttachments ? [...(c.uploads || []), ...userAttachments] : c.uploads,
+            todos: assistantTodos ? [...(c.todos || []), ...assistantTodos] : c.todos,
+            deliverables: assistantDeliverables ? [...(c.deliverables || []), ...assistantDeliverables] : c.deliverables
           };
         }
         return c;
@@ -702,6 +887,7 @@ export default function App() {
             skills={skills}
             onLoadProject={handleLoadProject}
             onLoadSkill={handleLoadSkill}
+            onToggleTodo={handleToggleTodo}
           />
         )}
       </main>

@@ -1,8 +1,38 @@
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  size: number | string;
+  type?: string;
+  uploadedAt?: number;
+  content?: string;
+}
+
+export interface ChatTodo {
+  id: string;
+  title: string;
+  completed: boolean;
+  stepNumber?: number;
+  description?: string;
+}
+
+export interface ChatDeliverable {
+  id: string;
+  name: string;
+  path?: string;
+  type?: string;
+  size?: string;
+  content?: string;
+  timestamp?: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   displayText?: string;
+  attachments?: ChatAttachment[];
+  todos?: ChatTodo[];
+  deliverables?: ChatDeliverable[];
   projectContext?: {
     projectId: string;
     projectName: string;
@@ -25,6 +55,9 @@ export interface ChatSession {
   agentId?: string;
   agentName?: string;
   isGhost?: boolean;
+  uploads?: ChatAttachment[];
+  todos?: ChatTodo[];
+  deliverables?: ChatDeliverable[];
 }
 
 export interface ProjectFile {

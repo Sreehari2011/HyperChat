@@ -16,10 +16,35 @@ import {
   Edit2,
   Trash2,
   FilePenLine,
-  Bot,
-  Plug
+  Bot
 } from 'lucide-react';
 import { ChatSession, ViewState, Project } from '../types';
+
+const GenieLampIcon = ({ size = 14, strokeWidth = 1.5 }: { size?: number; strokeWidth?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    {/* Magic wisp rising from spout */}
+    <path d="M21 8.5c.6-1.3-.8-2.2-.2-3.5" />
+    {/* Lid dome and finial */}
+    <path d="M9 12c0-2 5-2 5 0" />
+    <path d="M11.5 10V8.5" />
+    {/* Lamp body and upturned spout */}
+    <path d="M8.5 12c-2.2 0-2.5 5 1 6h4.5c3.5 0 6-3.2 8-7-2.5 1.3-5 1.5-7.5 1H8.5Z" />
+    {/* Handle */}
+    <path d="M7.2 12.6C4.5 11.4 2.5 13.4 3.5 15.8c.7 1.5 2.5 1.1 3.7.4" />
+    {/* Pedestal base */}
+    <path d="M9.5 18l-1 2.5h6l-1-2.5" />
+    <path d="M7.5 20.5h8" />
+  </svg>
+);
 
 interface SidebarProps {
   chats: ChatSession[];
@@ -417,8 +442,8 @@ export default function Sidebar({
           )}
 
           {renderNavItem(
-            "Connectors",
-            <Plug size={14} strokeWidth={1.5} />,
+            "Genie",
+            <GenieLampIcon size={14} strokeWidth={1.5} />,
             false,
             () => {}
           )}

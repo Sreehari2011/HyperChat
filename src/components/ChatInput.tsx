@@ -33,7 +33,7 @@ interface AttachedFile {
 }
 
 interface ChatInputProps {
-  onSendMessage: (message: string, isGhostMode?: boolean) => void;
+  onSendMessage: (message: string, isGhostMode?: boolean, attachments?: AttachedFile[]) => void;
   isInitial?: boolean;
   loadedProject?: Project | null;
   onUnloadProject?: () => void;
@@ -200,7 +200,7 @@ export default function ChatInput({
       payload = trimmedMessage ? `${trimmedMessage}\n\n${fileNames}` : fileNames;
     }
 
-    onSendMessage(payload, activeGhostMode);
+    onSendMessage(payload, activeGhostMode, attachedFiles.length > 0 ? [...attachedFiles] : undefined);
     setMessage('');
     setAttachedFiles([]);
   };
