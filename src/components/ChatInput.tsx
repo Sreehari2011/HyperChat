@@ -1,24 +1,28 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  Plus,
-  ArrowUp,
-  Check,
-  Paperclip,
-  Folder,
-  FilePenLine,
-  X,
-  Ghost,
-  ChevronDown,
-  Search,
-  FileText,
-  Sparkles,
+import { 
+  Plus, 
+  ArrowUp, 
+  ChevronDown, 
+  Folder, 
+  X, 
+  FilePenLine, 
+  Check, 
+  Paperclip, 
+  Search, 
+  Ghost
 } from 'lucide-react';
-import { Project, Skill, CHAT_MODELS, getModelLabel, getModelMaxTokens } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
+import { Project, Skill } from '../types';
 import { formatTokenCount, estimateTokens } from '../utils';
-import { Menu } from './ui';
 
-export interface AttachedFile {
+export const AVAILABLE_CHAT_MODELS = [
+  'cisai-lite',
+  'cisai-pro',
+  'cisai-ultra',
+] as const;
+
+interface AttachedFile {
   id: string;
   name: string;
   size: number;
@@ -37,6 +41,7 @@ interface ChatInputProps {
   skills?: Skill[];
   onLoadProject?: (project: Project) => void;
   onLoadSkill?: (skill: Skill) => void;
+  extensionBanner?: React.ReactNode;
   isGhostMode?: boolean;
   onToggleGhostMode?: (enabled: boolean) => void;
   onTokenCountChange?: (count: number) => void;
@@ -49,8 +54,8 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function ChatInput({
-  onSendMessage,
+export default function ChatInput({ 
+  onSendMessage, 
   isInitial = false,
   loadedProject,
   onUnloadProject,
@@ -62,93 +67,136 @@ export default function ChatInput({
   skills = [],
   onLoadProject,
   onLoadSkill,
+  extensionBanner,
   isGhostMode,
   onToggleGhostMode,
   onTokenCountChange,
-  disableGhostMode = false,
+  disableGhostMode = false
 }: ChatInputProps) {
   const [message, setMessage] = useState('');
-  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [localModel, setLocalModel] = useState<string>('cisai-lite');
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
+  const [isLoadProjectModalOpen, setIsLoadProjectModalOpen] = useState(false);
+  const [isImportSkillModalOpen, setIsImportSkillModalOpen] = useState(false);
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
+  const [skillSearchQuery, setSkillSearchQuery] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-  const [ghost, setGhost] = useState(false);
-  const [projectQuery, setProjectQuery] = useState('');
-  const [skillQuery, setSkillQuery] = useState('');
+  const [localGhostMode, setLocalGhostMode] = useState(false);
+  const [isGhostHovered, setIsGhostHovered] = useState(false);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const activeGhostMode = !disableGhostMode && (isGhostMode !== undefined ? isGhostMode : localGhostMode);
+
+  const handleToggleGhost = () => {
+    if (disableGhostMode) return;
+    const next = !activeGhostMode;
+    setLocalGhostMode(next);
+    onToggleGhostMode?.(next);
+  };
+
+  const handleGhostMouseEnter = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsGhostHovered(true);
+    }, 2000);
+  };
+
+  const handleGhostMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsGhostHovered(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const attachMenuRef = useRef<HTMLDivElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const modelMenuRef = useRef<HTMLDivElement>(null);
 
-  const activeGhost = !disableGhostMode && (isGhostMode ?? ghost);
-  const activeModelId = selectedModel || 'cisai-lite';
+  const activeModel = selectedModel || localModel;
 
-  /* textarea auto-resize */
+  const handleSelectModel = (model: string) => {
+    setLocalModel(model);
+    onSelectModel?.(model);
+    setIsModelDropdownOpen(false);
+  };
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(target)) {
+        setIsModelDropdownOpen(false);
+      }
+      if (plusMenuRef.current && !plusMenuRef.current.contains(target)) {
+        setIsPlusMenuOpen(false);
+      }
+    }
+
+    if (isModelDropdownOpen || isPlusMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isModelDropdownOpen, isPlusMenuOpen]);
+
+  // Adjust textarea height
   useLayoutEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = '0px';
-      const h = textareaRef.current.scrollHeight;
-      textareaRef.current.style.height = `${Math.min(Math.max(h, 24), 200)}px`;
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.min(Math.max(scrollHeight, 52), 220)}px`;
     }
   }, [message]);
 
-  /* focus when context attaches */
   useEffect(() => {
-    if ((loadedProject || loadedSkill) && textareaRef.current) textareaRef.current.focus();
+    if ((loadedProject || loadedSkill) && textareaRef.current) {
+      textareaRef.current.focus();
+    }
   }, [loadedProject, loadedSkill]);
-
-  /* close attach menu on outside click */
-  useEffect(() => {
-    if (!isAttachMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
-        setIsAttachMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [isAttachMenuOpen]);
-
-  useEffect(() => {
-    if (!isModelMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
-        setIsModelMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [isModelMenuOpen]);
 
   const handleFilesAdded = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    setAttachedFiles(prev => [
-      ...prev,
-      ...Array.from(files).map(f => ({
-        id: Math.random().toString(36).substring(2, 9),
-        name: f.name,
-        size: f.size,
-      })),
-    ]);
+
+    const newFiles: AttachedFile[] = Array.from(files).map((file: File) => ({
+      id: Math.random().toString(36).substring(2, 9),
+      name: file.name,
+      size: file.size
+    }));
+
+    setAttachedFiles(prev => [...prev, ...newFiles]);
+    // Reset file input value so same files can be re-selected if removed
     e.target.value = '';
     textareaRef.current?.focus();
   };
 
-  const removeAttachedFile = (id: string) => setAttachedFiles(prev => prev.filter(f => f.id !== id));
+  const removeAttachedFile = (id: string) => {
+    setAttachedFiles(prev => prev.filter(f => f.id !== id));
+  };
 
   const handleSend = () => {
-    const trimmed = message.trim();
-    if (!trimmed && attachedFiles.length === 0) return;
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage && attachedFiles.length === 0) return;
 
-    let payload = trimmed;
+    let payload = trimmedMessage;
     if (attachedFiles.length > 0) {
-      const names = attachedFiles.map(f => `[Attached: ${f.name} (${formatFileSize(f.size)})]`).join(' ');
-      payload = trimmed ? `${trimmed}\n\n${names}` : names;
+      const fileNames = attachedFiles.map(f => `[Attached: ${f.name} (${formatFileSize(f.size)})]`).join(' ');
+      payload = trimmedMessage ? `${trimmedMessage}\n\n${fileNames}` : fileNames;
     }
 
-    onSendMessage(payload, activeGhost, attachedFiles.length > 0 ? [...attachedFiles] : undefined);
+    onSendMessage(payload, activeGhostMode, attachedFiles.length > 0 ? [...attachedFiles] : undefined);
     setMessage('');
     setAttachedFiles([]);
   };
@@ -160,317 +208,665 @@ export default function ChatInput({
     }
   };
 
-  /* token estimate */
+  const filteredProjects = projects.filter(p => {
+    if (!projectSearchQuery.trim()) return true;
+    const q = projectSearchQuery.toLowerCase();
+    return p.name.toLowerCase().includes(q) || (p.description && p.description.toLowerCase().includes(q));
+  });
+
+  const filteredSkills = skills.filter(s => {
+    if (!skillSearchQuery.trim()) return true;
+    const q = skillSearchQuery.toLowerCase();
+    return s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q));
+  });
+
+  // Calculate realtime token usage
   const messageTokens = message.trim() ? estimateTokens(message) : 0;
-  const attachedTokens = attachedFiles.reduce((acc, f) => acc + estimateTokens({ size: f.size }), 0);
-  const projectTokens = loadedProject
-    ? (loadedProject.files || []).reduce((acc, f) => acc + (typeof f.tokens === 'number' ? f.tokens : estimateTokens(f)), 0)
+  const attachedFilesTokens = attachedFiles.reduce((acc, f) => acc + estimateTokens({ size: f.size }), 0);
+  const loadedProjectTokens = loadedProject
+    ? (loadedProject.files || []).reduce((acc, f) => {
+        if (typeof f.tokens === 'number') return acc + f.tokens;
+        if (typeof f.tokens === 'string') {
+          const parsed = parseInt(f.tokens);
+          if (!isNaN(parsed)) return acc + parsed;
+        }
+        return acc + estimateTokens(f);
+      }, 0)
     : 0;
-  const skillTokens = loadedSkill
-    ? (loadedSkill.files?.length
+  const loadedSkillTokens = loadedSkill
+    ? (loadedSkill.files && loadedSkill.files.length > 0
         ? loadedSkill.files.reduce((acc, f) => acc + (typeof f.tokens === 'number' ? f.tokens : estimateTokens(f)), 0)
         : estimateTokens(loadedSkill.content || ''))
     : 0;
-  const usedTokens = messageTokens + attachedTokens + projectTokens + skillTokens;
-  const maxTokens = getModelMaxTokens(activeModelId);
+
+  const currentUsedTokens = messageTokens + attachedFilesTokens + loadedProjectTokens + loadedSkillTokens;
 
   useEffect(() => {
-    onTokenCountChange?.(usedTokens);
-  }, [usedTokens, onTokenCountChange]);
-
-  const filteredProjects = projects.filter(p =>
-    !projectQuery.trim() ||
-    p.name.toLowerCase().includes(projectQuery.toLowerCase()) ||
-    (p.description || '').toLowerCase().includes(projectQuery.toLowerCase())
-  );
-  const filteredSkills = skills.filter(s =>
-    !skillQuery.trim() ||
-    s.name.toLowerCase().includes(skillQuery.toLowerCase()) ||
-    (s.description || '').toLowerCase().includes(skillQuery.toLowerCase())
-  );
-
-  const hasContent = message.trim().length > 0 || attachedFiles.length > 0;
-
-  /* ── Context picker modal (projects + skills in ONE overlay, tabs) ── */
-  const picker = isPickerOpen && createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4 animate-fade-in"
-      onMouseDown={e => { if (e.target === e.currentTarget) { setIsPickerOpen(false); setProjectQuery(''); setSkillQuery(''); } }}
-    >
-      <div
-        className="card flex max-h-[75vh] w-full max-w-lg flex-col overflow-hidden bg-ink-800 animate-pop-in"
-        onMouseDown={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 pt-4 pb-3">
-          <h3 className="text-sm font-medium text-ink-50">Add context</h3>
-          <button className="icon-btn" onClick={() => setIsPickerOpen(false)} aria-label="Close">
-            <X size={16} />
-          </button>
-        </div>
-        <div className="flex gap-2 px-5 pb-3">
-          <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
-            <input
-              className="input-base !rounded-full pl-9 !py-2 text-[13px]"
-              placeholder="Search projects and skills…"
-              value={projectQuery || skillQuery}
-              onChange={e => { setProjectQuery(e.target.value); setSkillQuery(e.target.value); }}
-              autoFocus
-            />
-          </div>
-        </div>
-
-        <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-4">
-          {filteredProjects.length > 0 && (
-            <div className="mb-3">
-              <div className="px-1.5 pb-1 text-[11px] font-medium uppercase tracking-wider text-ink-300">Projects</div>
-              {filteredProjects.map(project => {
-                const isLoaded = loadedProject?.id === project.id;
-                return (
-                  <button
-                    key={project.id}
-                    className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
-                    onClick={() => {
-                      if (isLoaded) onUnloadProject?.();
-                      else onLoadProject?.(project);
-                      setIsPickerOpen(false);
-                    }}
-                  >
-                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${isLoaded ? 'border-amber-200/30 bg-amber-100/10 text-amber-200' : 'border-ink-600 bg-ink-750 text-ink-200'}`}>
-                      <Folder size={15} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-medium text-ink-50">{project.name}</div>
-                      <div className="truncate text-[11px] text-ink-300">{project.files?.length || 0} files · {project.dateString || ''}</div>
-                    </div>
-                    {isLoaded && <Check size={15} className="shrink-0 text-amber-200" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {filteredSkills.length > 0 && (
-            <div>
-              <div className="px-1.5 pb-1 text-[11px] font-medium uppercase tracking-wider text-ink-300">Skills</div>
-              {filteredSkills.map(skill => {
-                const isLoaded = loadedSkill?.id === skill.id;
-                return (
-                  <button
-                    key={skill.id}
-                    className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
-                    onClick={() => {
-                      if (isLoaded) onUnloadSkill?.();
-                      else onLoadSkill?.(skill);
-                      setIsPickerOpen(false);
-                    }}
-                  >
-                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${isLoaded ? 'border-amber-200/30 bg-amber-100/10 text-amber-200' : 'border-ink-600 bg-ink-750 text-ink-200'}`}>
-                      <FilePenLine size={15} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-medium text-ink-50">{skill.name}</div>
-                      <div className="truncate text-[11px] text-ink-300">{skill.category === 'builtin' ? 'Builtin' : 'Created by me'}</div>
-                    </div>
-                    {isLoaded && <Check size={15} className="shrink-0 text-amber-200" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {filteredProjects.length === 0 && filteredSkills.length === 0 && (
-            <div className="flex flex-col items-center gap-2 py-10 text-center">
-              <Sparkles size={20} className="text-ink-400" />
-              <p className="text-[13px] text-ink-300">No projects or skills match your search.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
+    onTokenCountChange?.(currentUsedTokens);
+  }, [currentUsedTokens, onTokenCountChange]);
 
   return (
     <>
-      <input type="file" ref={fileInputRef} multiple onChange={handleFilesAdded} className="hidden" />
+      {/* Hidden file input for system file picker */}
+      <input 
+        type="file"
+        ref={fileInputRef}
+        multiple
+        onChange={handleFilesAdded}
+        className="hidden"
+      />
 
-      <div className={`mx-auto w-full ${isInitial ? 'max-w-[720px]' : 'max-w-[720px]'} ${isInitial ? '' : ''}`}>
-        {picker}
+      <div className="w-full max-w-3xl mx-auto flex flex-col relative">
+        <AnimatePresence>
+          {extensionBanner && (
+            <motion.div
+              key="extension-banner"
+              initial={{ height: 0, marginBottom: 0, opacity: 0 }}
+              animate={{ 
+                height: 'auto', 
+                marginBottom: -14, 
+                opacity: 1,
+                transition: { 
+                  duration: 0.42, 
+                  delay: 0.15,
+                  ease: [0.16, 1, 0.3, 1] 
+                }
+              }}
+              exit={{ 
+                height: 0, 
+                marginBottom: 0, 
+                opacity: 0,
+                transition: { 
+                  duration: 0.26, 
+                  delay: 0,
+                  ease: [0.16, 1, 0.3, 1] 
+                }
+              }}
+              className="relative z-0 mx-3.5 overflow-hidden"
+            >
+              <motion.div
+                initial={{ y: 34 }}
+                animate={{ 
+                  y: 0,
+                  transition: { 
+                    duration: 0.42, 
+                    delay: 0.15,
+                    ease: [0.16, 1, 0.3, 1] 
+                  }
+                }}
+                exit={{ 
+                  y: 32,
+                  transition: { 
+                    duration: 0.26, 
+                    delay: 0,
+                    ease: [0.16, 1, 0.3, 1] 
+                  }
+                }}
+              >
+                {extensionBanner}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <div
-          className={`relative rounded-[26px] border transition-all duration-200 ${
-            activeGhost
-              ? 'border-ink-500 bg-[#232326] shadow-[0_0_32px_rgba(255,255,255,0.05)]'
-              : 'border-ink-600 bg-[#1c1c1c] shadow-lg shadow-black/40 focus-within:border-ink-400'
-          }`}
+        <div 
+          className={`w-full flex flex-col rounded-2xl shadow-lg cursor-text relative z-10 transition-[background-color,border-color,box-shadow] duration-250 ease-out ${
+            activeGhostMode 
+              ? 'bg-[#232326] border border-white/40 ring-1 ring-white/10 shadow-[0_0_25px_rgba(255,255,255,0.06)]' 
+              : 'bg-[#202020] border border-[#333]'
+          } ${isInitial ? 'shadow-black/50' : ''}`}
           onClick={() => textareaRef.current?.focus()}
         >
-          {/* ghost banner */}
-          {activeGhost && (
-            <div className="flex items-center justify-between rounded-t-[26px] border-b border-white/10 bg-white/[0.05] px-4 py-2 text-xs text-ink-100">
-              <span className="flex items-center gap-2 font-medium">
-                <Ghost size={13} /> Ghost mode — this chat won't be saved to history
-              </span>
-              <button
-                className="text-ink-200 underline-offset-2 hover:text-ink-50 hover:underline"
-                onClick={e => { e.stopPropagation(); setGhost(false); onToggleGhostMode?.(false); }}
+          {/* Ghost Mode Top Warning Indicator */}
+          <AnimatePresence initial={false}>
+            {activeGhostMode && (
+              <motion.div
+                key="ghost-mode-warning-bar"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ 
+                  height: 'auto', 
+                  opacity: 1,
+                  transition: { 
+                    height: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+                    opacity: { duration: 0.22, ease: 'easeOut' }
+                  }
+                }}
+                exit={{ 
+                  height: 0, 
+                  opacity: 0,
+                  transition: { 
+                    height: { duration: 0.22, ease: [0.16, 1, 0.3, 1] },
+                    opacity: { duration: 0.15, ease: 'easeIn' }
+                  }
+                }}
+                className="overflow-hidden"
               >
-                Turn off
+                <div className="border-b border-white/10 bg-white/[0.04] px-3.5 py-2 flex items-center justify-between text-xs rounded-t-2xl">
+                  <div className="flex items-center gap-2 text-white font-medium">
+                    <Ghost size={14} className="text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.8)] flex-shrink-0" />
+                    <span>Ghost Mode - Your chats will be Secrets</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleGhost();
+                    }}
+                    className="text-zinc-400 hover:text-white text-[11px] underline cursor-pointer ml-2 flex-shrink-0 transition-colors"
+                  >
+                    Turn off
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+        <div className="flex items-start flex-wrap gap-2 px-3.5 pt-3">
+          {loadedProject && (
+            <div 
+              className="inline-flex items-center gap-1.5 bg-[#252525] border border-[#383838] text-zinc-200 text-xs py-1 px-2.5 rounded-lg flex-shrink-0 select-none animate-in fade-in zoom-in-95 duration-150 group transition-colors my-0.5"
+              title={`Project: ${loadedProject.name}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Folder size={13} className="text-zinc-400 flex-shrink-0" />
+              <span className="truncate max-w-[220px] font-medium text-zinc-200">{loadedProject.name}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUnloadProject?.();
+                }}
+                className="ml-0.5 p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-[#383838] rounded transition-colors flex-shrink-0 cursor-pointer"
+                title="Remove project from chat"
+              >
+                <X size={12} strokeWidth={2.5} />
               </button>
             </div>
           )}
 
-          {/* context + attachment chips */}
-          {(loadedProject || loadedSkill || attachedFiles.length > 0) && (
-            <div className="flex flex-wrap gap-1.5 px-4 pt-3">
-              {loadedProject && (
-                <div className="flex items-center gap-1.5 rounded-full border border-ink-500 bg-ink-750 py-1 pl-2.5 pr-1.5 text-xs text-ink-100">
-                  <Folder size={12} className="text-amber-200/80" />
-                  <span className="max-w-[180px] truncate font-medium">{loadedProject.name}</span>
-                  <button className="rounded-full p-0.5 text-ink-300 hover:bg-white/[0.08] hover:text-ink-50" onClick={e => { e.stopPropagation(); onUnloadProject?.(); }} aria-label="Remove project">
-                    <X size={11} strokeWidth={2.5} />
-                  </button>
-                </div>
-              )}
-              {loadedSkill && (
-                <div className="flex items-center gap-1.5 rounded-full border border-ink-500 bg-ink-750 py-1 pl-2.5 pr-1.5 text-xs text-ink-100">
-                  <FilePenLine size={12} className="text-amber-200/80" />
-                  <span className="max-w-[180px] truncate font-medium">{loadedSkill.name}</span>
-                  <button className="rounded-full p-0.5 text-ink-300 hover:bg-white/[0.08] hover:text-ink-50" onClick={e => { e.stopPropagation(); onUnloadSkill?.(); }} aria-label="Remove skill">
-                    <X size={11} strokeWidth={2.5} />
-                  </button>
-                </div>
-              )}
-              {attachedFiles.map(file => (
-                <div key={file.id} className="flex items-center gap-1.5 rounded-full border border-ink-500 bg-ink-750 py-1 pl-2.5 pr-1.5 text-xs text-ink-100">
-                  <FileText size={12} className="text-ink-200" />
-                  <span className="max-w-[160px] truncate font-medium">{file.name}</span>
-                  <span className="hidden text-[10px] text-ink-300 sm:inline">{formatTokenCount(file.size)}</span>
-                  <button className="rounded-full p-0.5 text-ink-300 hover:bg-white/[0.08] hover:text-ink-50" onClick={e => { e.stopPropagation(); removeAttachedFile(file.id); }} aria-label="Remove file">
-                    <X size={11} strokeWidth={2.5} />
-                  </button>
-                </div>
-              ))}
+          {loadedSkill && (
+            <div 
+              className="inline-flex items-center gap-1.5 bg-[#252525] border border-[#383838] text-zinc-200 text-xs py-1 px-2.5 rounded-lg flex-shrink-0 select-none animate-in fade-in zoom-in-95 duration-150 group transition-colors my-0.5"
+              title={`Skill: ${loadedSkill.name}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <FilePenLine size={13} className="text-zinc-400 flex-shrink-0" strokeWidth={1.5} />
+              <span className="truncate max-w-[220px] font-medium text-zinc-200">{loadedSkill.name}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUnloadSkill?.();
+                }}
+                className="ml-0.5 p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-[#383838] rounded transition-colors flex-shrink-0 cursor-pointer"
+                title="Remove skill from chat"
+              >
+                <X size={12} strokeWidth={2.5} />
+              </button>
             </div>
           )}
 
-          {/* textarea */}
-          <div className="px-4 pt-3 pb-1">
-            <textarea
-              ref={textareaRef}
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={activeGhost ? 'Message HyperChat (not saved)…' : 'Message HyperChat…'}
-              className="w-full resize-none bg-transparent text-[15px] leading-relaxed text-ink-50 outline-none placeholder:text-ink-300"
-              rows={1}
-            />
-          </div>
+          {attachedFiles.map(file => (
+            <div 
+              key={file.id}
+              className="inline-flex items-center gap-1.5 bg-[#252525] border border-[#383838] text-zinc-200 text-xs py-1 px-2.5 rounded-lg flex-shrink-0 select-none animate-in fade-in zoom-in-95 duration-150 group transition-colors my-0.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Paperclip size={12} className="text-zinc-400 flex-shrink-0" />
+              <span className="truncate max-w-[180px] font-medium text-zinc-200">{file.name}</span>
+              <span className="text-[10px] text-zinc-500 font-normal">({formatTokenCount(file.size)})</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeAttachedFile(file.id);
+                }}
+                className="ml-0.5 p-0.5 text-zinc-400 hover:text-zinc-100 hover:bg-[#383838] rounded transition-colors flex-shrink-0 cursor-pointer"
+                title="Remove file"
+              >
+                <X size={12} strokeWidth={2.5} />
+              </button>
+            </div>
+          ))}
 
-          {/* bottom bar */}
-          <div className="flex items-center justify-between px-3 pb-3 pt-1" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-1">
-              {/* attach button */}
-              <div className="relative" ref={attachMenuRef}>
-                <button
-                  className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${
-                    isAttachMenuOpen
-                      ? 'bg-ink-600 text-ink-50 rotate-45'
-                      : 'text-ink-200 hover:bg-white/[0.07] hover:text-ink-50'
-                  }`}
-                  onClick={() => setIsAttachMenuOpen(v => !v)}
-                  title="Attach"
+          <textarea
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={activeGhostMode ? "Type in Ghost Mode (history not logged)..." : "Type something..."}
+            className="flex-1 min-w-[200px] bg-transparent text-zinc-100 placeholder:text-zinc-500 py-1.5 outline-none resize-none min-h-[52px] max-h-[220px] text-sm leading-relaxed"
+            rows={2}
+          />
+        </div>
+
+        <div className="flex items-center justify-between px-2.5 pt-2 pb-2 gap-2 relative z-20" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+            {/* Plus Button with Dropdown */}
+            <div className="relative z-30" ref={plusMenuRef}>
+              <button 
+                type="button"
+                onClick={() => setIsPlusMenuOpen(prev => !prev)}
+                className={`p-2 rounded-full transition-colors flex-shrink-0 cursor-pointer ${
+                  isPlusMenuOpen 
+                    ? 'bg-[#333] text-zinc-100' 
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#333]'
+                }`}
+                title="Add options"
+              >
+                <Plus size={20} strokeWidth={2} className={`transition-transform duration-200 ${isPlusMenuOpen ? 'rotate-45' : ''}`} />
+              </button>
+
+              {/* Three Options Menu */}
+              {isPlusMenuOpen && (
+                <div 
+                  className="absolute left-0 bottom-full mb-2.5 w-48 bg-[#1c1c1c] border border-[#333] rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <Plus size={18} strokeWidth={2} />
-                </button>
-                {isAttachMenuOpen && (
-                  <div className="menu-panel absolute bottom-full left-0 mb-2 animate-pop-in">
-                    <button className="menu-item" onClick={() => { setIsAttachMenuOpen(false); fileInputRef.current?.click(); }}>
-                      <Paperclip size={14} /> Add files
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPlusMenuOpen(false);
+                        fileInputRef.current?.click();
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-medium rounded-lg text-zinc-300 hover:text-white hover:bg-[#282828] transition-colors text-left cursor-pointer"
+                    >
+                      <Paperclip size={14} className="text-zinc-400" />
+                      <span>Add Files</span>
                     </button>
-                    <button className="menu-item" onClick={() => { setIsAttachMenuOpen(false); setIsPickerOpen(true); }}>
-                      <Folder size={14} /> Projects & skills
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPlusMenuOpen(false);
+                        setIsLoadProjectModalOpen(true);
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-medium rounded-lg text-zinc-300 hover:text-white hover:bg-[#282828] transition-colors text-left cursor-pointer"
+                    >
+                      <Folder size={14} className="text-zinc-400" />
+                      <span>Load Project</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPlusMenuOpen(false);
+                        setIsImportSkillModalOpen(true);
+                      }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-medium rounded-lg text-zinc-300 hover:text-white hover:bg-[#282828] transition-colors text-left cursor-pointer"
+                    >
+                      <FilePenLine size={14} className="text-zinc-400" />
+                      <span>Import Skill</span>
                     </button>
                   </div>
-                )}
-              </div>
-
-              {/* ghost toggle */}
-              {!disableGhostMode && (
-                <button
-                  className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
-                    activeGhost
-                      ? 'bg-white/[0.09] text-ink-50'
-                      : 'text-ink-200 hover:bg-white/[0.07] hover:text-ink-50'
-                  }`}
-                  onClick={() => { const next = !activeGhost; setGhost(next); onToggleGhostMode?.(next); }}
-                  title={activeGhost ? 'Turn off Ghost mode' : 'Ghost mode — temporary chat'}
-                >
-                  <Ghost size={16} />
-                </button>
+                </div>
               )}
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* model selector */}
-              <div className="relative" ref={modelMenuRef}>
-                <button
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-ink-200 transition-colors hover:bg-white/[0.07] hover:text-ink-50"
-                  onClick={() => setIsModelMenuOpen(v => !v)}
+            {/* Ghost Mode (Incognito / Temporary Chat) Toggle */}
+            {!disableGhostMode && (
+              <div className="relative z-30 flex items-center">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    handleGhostMouseLeave();
+                    handleToggleGhost();
+                  }}
+                  onMouseEnter={handleGhostMouseEnter}
+                  onMouseLeave={handleGhostMouseLeave}
+                  className={`p-2 rounded-full transition-colors flex-shrink-0 cursor-pointer relative ${
+                    activeGhostMode 
+                      ? 'hover:bg-white/[0.06]' 
+                      : 'hover:bg-[#333]'
+                  }`}
+                  aria-label="Toggle Ghost Mode (Temporary chat)"
                 >
-                  <span>{getModelLabel(activeModelId)}</span>
-                  <ChevronDown size={13} className={`transition-transform ${isModelMenuOpen ? 'rotate-180' : ''}`} />
+                  <Ghost 
+                    size={19} 
+                    strokeWidth={2} 
+                    className={`transition-colors duration-200 ${
+                      activeGhostMode 
+                        ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.95)]' 
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`} 
+                  />
                 </button>
-                {isModelMenuOpen && (
-                  <div className="menu-panel absolute bottom-full right-0 mb-2 w-64 animate-pop-in">
-                    {CHAT_MODELS.map(model => {
-                      const isSelected = activeModelId === model.id;
+
+                {/* Hover Tooltip: Ghost Mode */}
+                <AnimatePresence>
+                  {isGhostHovered && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 3, scale: 0.95 }}
+                      transition={{ duration: 0.15, ease: 'easeOut' }}
+                      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none whitespace-nowrap"
+                    >
+                      <div className="bg-[#1c1c1f] border border-[#38383c] text-white text-xs font-medium px-2.5 py-1 rounded-md shadow-xl shadow-black/80 flex items-center justify-center">
+                        <span>Ghost Mode</span>
+                      </div>
+                      {/* Tooltip arrow pointer */}
+                      <div className="w-1.5 h-1.5 bg-[#1c1c1f] border-r border-b border-[#38383c] rotate-45 mx-auto -mt-1 shadow-sm" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="relative z-30" ref={modelDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsModelDropdownOpen(prev => !prev)}
+                className={`flex px-3 py-1.5 items-center text-xs font-medium gap-1.5 w-fit rounded-lg cursor-pointer transition-colors ${
+                  isModelDropdownOpen 
+                    ? 'bg-[#333] text-zinc-100' 
+                    : 'text-zinc-400 hover:bg-[#333] hover:text-zinc-200'
+                }`}
+              >
+                <span>{activeModel}</span>
+                <ChevronDown 
+                  size={14} 
+                  strokeWidth={2} 
+                  className={`transition-transform duration-200 ${isModelDropdownOpen ? 'rotate-180 text-zinc-200' : ''}`} 
+                />
+              </button>
+
+              {isModelDropdownOpen && (
+                <div 
+                  className="absolute right-0 bottom-full mb-2.5 w-36 bg-[#1a1a1a] border border-[#333] rounded-xl shadow-2xl p-1 z-50 animate-in fade-in zoom-in-95 duration-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    {AVAILABLE_CHAT_MODELS.map((model) => {
+                      const isSelected = activeModel === model;
                       return (
                         <button
-                          key={model.id}
-                          className="menu-item !items-start !gap-2.5 !py-2.5"
-                          onClick={() => { onSelectModel?.(model.id); setIsModelMenuOpen(false); }}
+                          key={model}
+                          type="button"
+                          onClick={() => handleSelectModel(model)}
+                          className={`flex items-center justify-between w-full px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors text-left cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#2a2a2a] text-zinc-100'
+                              : 'text-zinc-400 hover:bg-[#252525] hover:text-zinc-200'
+                          }`}
                         >
-                          <div className="flex w-full items-center justify-between gap-3">
-                            <div className="min-w-0 text-left">
-                              <div className={`text-[13px] font-medium ${isSelected ? 'text-ink-50' : 'text-ink-100'}`}>{model.label}</div>
-                              <div className="text-[11px] text-ink-300">{model.description}</div>
-                            </div>
-                            {isSelected && <Check size={14} className="shrink-0 text-amber-200" />}
-                          </div>
+                          <span>{model}</span>
+                          {isSelected && <Check size={13} className="text-blue-400" />}
                         </button>
                       );
                     })}
                   </div>
-                )}
-              </div>
-
-              {/* send */}
-              <button
-                onClick={handleSend}
-                disabled={!hasContent}
-                className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${
-                  hasContent
-                    ? 'bg-amber-100 text-ink-950 hover:bg-amber-50 active:scale-95'
-                    : 'bg-ink-600 text-ink-300'
-                }`}
-                title="Send message"
-                aria-label="Send message"
-              >
-                <ArrowUp size={17} strokeWidth={2.25} />
-              </button>
+                </div>
+              )}
             </div>
+            <button 
+              type="button"
+              onClick={handleSend}
+              disabled={!message.trim() && attachedFiles.length === 0}
+              className={`p-2 rounded-full transition-colors cursor-pointer ${
+                message.trim() || attachedFiles.length > 0
+                  ? 'bg-zinc-200 text-zinc-900 hover:bg-white' 
+                  : 'bg-[#333] text-zinc-500 cursor-not-allowed'
+              }`}
+              title="Send message"
+            >
+              <ArrowUp size={18} strokeWidth={2} />
+            </button>
           </div>
         </div>
-
-        {/* token readout */}
-        <div className="mt-2 text-center text-[11px] text-ink-300">
-          {usedTokens > 0
-            ? `${usedTokens.toLocaleString()} / ${maxTokens.toLocaleString()} tokens in context`
-            : isInitial
-              ? 'HyperChat can make mistakes. Verify important information.'
-              : ''}
-        </div>
       </div>
+    </div>
+
+      {/* Load Project Modal Popup */}
+      {isLoadProjectModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            setIsLoadProjectModalOpen(false);
+            setProjectSearchQuery('');
+          }}
+        >
+          <div 
+            className="bg-[#181818] border border-[#2e2e2e] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-[#262626] flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-zinc-100">Load Project</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">Attach a project context to your chat session</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLoadProjectModalOpen(false);
+                  setProjectSearchQuery('');
+                }}
+                className="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-[#262626] rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Search Box */}
+            <div className="px-6 pt-4 pb-2">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input 
+                  type="text"
+                  value={projectSearchQuery}
+                  onChange={(e) => setProjectSearchQuery(e.target.value)}
+                  placeholder="Search projects..."
+                  autoFocus
+                  className="w-full bg-[#121212] border border-[#2a2a2a] rounded-xl pl-9 pr-3.5 py-2 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-[#444]"
+                />
+              </div>
+            </div>
+
+            {/* Project List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
+              {filteredProjects.length === 0 ? (
+                <div className="text-center py-12 text-xs text-zinc-500">
+                  {projectSearchQuery ? `No projects matching "${projectSearchQuery}"` : 'No projects available'}
+                </div>
+              ) : (
+                filteredProjects.map(project => {
+                  const isCurrentLoaded = loadedProject?.id === project.id;
+                  return (
+                    <div
+                      key={project.id}
+                      onClick={() => {
+                        if (isCurrentLoaded) {
+                          onUnloadProject?.();
+                        } else {
+                          onLoadProject?.(project);
+                        }
+                        setIsLoadProjectModalOpen(false);
+                        setProjectSearchQuery('');
+                      }}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
+                        isCurrentLoaded
+                          ? 'bg-[#222] border-blue-500/50 shadow-sm'
+                          : 'bg-[#151515] border-[#262626] hover:bg-[#1e1e1e] hover:border-[#383838]'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                          isCurrentLoaded ? 'bg-blue-950/40 text-blue-400 border border-blue-800/40' : 'bg-[#222] text-zinc-400 group-hover:text-zinc-200'
+                        }`}>
+                          <Folder size={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-semibold text-zinc-100 truncate">{project.name}</h4>
+                            {isCurrentLoaded && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-950/50 text-blue-400 border border-blue-800/50 font-medium">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          {project.description && (
+                            <p className="text-[11px] text-zinc-400 line-clamp-1 mt-0.5">
+                              {project.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-3 text-[10px] text-zinc-500 mt-1">
+                            <span>{project.files?.length || 0} file{project.files?.length === 1 ? '' : 's'}</span>
+                            {project.dateString && <span>• {project.dateString}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className={`text-xs font-medium px-3 py-1.5 rounded-lg shrink-0 transition-colors ${
+                          isCurrentLoaded
+                            ? 'bg-rose-950/40 text-rose-300 hover:bg-rose-900/50 border border-rose-800/40'
+                            : 'bg-[#262626] text-zinc-200 group-hover:bg-[#333] group-hover:text-white'
+                        }`}
+                      >
+                        {isCurrentLoaded ? 'Unload' : 'Load Project'}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Import Skill Modal Popup */}
+      {isImportSkillModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150"
+          onClick={() => {
+            setIsImportSkillModalOpen(false);
+            setSkillSearchQuery('');
+          }}
+        >
+          <div 
+            className="bg-[#181818] border border-[#2e2e2e] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-[#262626] flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-zinc-100">Import Skill</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">Select a skill from the library to load into your chat</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportSkillModalOpen(false);
+                  setSkillSearchQuery('');
+                }}
+                className="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-[#262626] rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Search Box */}
+            <div className="px-6 pt-4 pb-2">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                <input 
+                  type="text"
+                  value={skillSearchQuery}
+                  onChange={(e) => setSkillSearchQuery(e.target.value)}
+                  placeholder="Search skills in library..."
+                  autoFocus
+                  className="w-full bg-[#121212] border border-[#2a2a2a] rounded-xl pl-9 pr-3.5 py-2 text-xs text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-[#444]"
+                />
+              </div>
+            </div>
+
+            {/* Skill List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
+              {filteredSkills.length === 0 ? (
+                <div className="text-center py-12 text-xs text-zinc-500">
+                  {skillSearchQuery ? `No skills matching "${skillSearchQuery}"` : 'No skills in library'}
+                </div>
+              ) : (
+                filteredSkills.map(skill => {
+                  const isCurrentLoaded = loadedSkill?.id === skill.id;
+                  return (
+                    <div
+                      key={skill.id}
+                      onClick={() => {
+                        if (isCurrentLoaded) {
+                          onUnloadSkill?.();
+                        } else {
+                          onLoadSkill?.(skill);
+                        }
+                        setIsImportSkillModalOpen(false);
+                        setSkillSearchQuery('');
+                      }}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
+                        isCurrentLoaded
+                          ? 'bg-[#222] border-blue-500/50 shadow-sm'
+                          : 'bg-[#151515] border-[#262626] hover:bg-[#1e1e1e] hover:border-[#383838]'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                          isCurrentLoaded ? 'bg-blue-950/40 text-blue-400 border border-blue-800/40' : 'bg-[#222] text-zinc-400 group-hover:text-zinc-200'
+                        }`}>
+                          <FilePenLine size={16} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-semibold text-zinc-100 truncate">{skill.name}</h4>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                              skill.category === 'builtin'
+                                ? 'bg-[#242424] text-zinc-400 border border-[#333]'
+                                : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40'
+                            }`}>
+                              {skill.category === 'builtin' ? 'Builtin' : 'Created by Me'}
+                            </span>
+                            {isCurrentLoaded && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-950/50 text-blue-400 border border-blue-800/50 font-medium">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          {skill.description && (
+                            <p className="text-[11px] text-zinc-400 line-clamp-1 mt-0.5">
+                              {skill.description}
+                            </p>
+                          )}
+                          {skill.author && (
+                            <div className="text-[10px] text-zinc-500 mt-1">
+                              <span>By {skill.author}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className={`text-xs font-medium px-3 py-1.5 rounded-lg shrink-0 transition-colors ${
+                          isCurrentLoaded
+                            ? 'bg-rose-950/40 text-rose-300 hover:bg-rose-900/50 border border-rose-800/40'
+                            : 'bg-[#262626] text-zinc-200 group-hover:bg-[#333] group-hover:text-white'
+                        }`}
+                      >
+                        {isCurrentLoaded ? 'Unload' : 'Import Skill'}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 }

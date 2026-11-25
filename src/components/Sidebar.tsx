@@ -1,58 +1,70 @@
-import React, { useState } from 'react';
-import {
-  MessageSquarePlus,
-  History,
-  Folder,
-  FilePenLine,
-  Bot,
-  PanelLeftClose,
+import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { 
+  MessageSquarePlus, 
+  MessagesSquare, 
+  Settings, 
+  PanelLeftClose, 
   PanelLeftOpen,
-  MoreHorizontal,
+  Folder,
+  FolderOpen,
+  Key,
+  LogOut,
+  X,
+  MoreVertical,
   Flag,
+  Edit2,
   Trash2,
-  Pencil,
-  Ghost,
+  FilePenLine,
+  Bot
 } from 'lucide-react';
 import { ChatSession, ViewState, Project } from '../types';
-import { Menu, Modal, Field } from './ui';
 
-/* HyperChat wordmark — simple geometric mark + name */
-function Logo({ collapsed }: { collapsed: boolean }) {
-  return (
-    <div className="flex items-center gap-2.5 overflow-hidden pl-1">
-      <svg width="26" height="26" viewBox="0 0 32 32" className="shrink-0">
-        <rect width="32" height="32" rx="8" fill="#e4a35a" />
-        <path d="M16 7l8.5 15H7.5z" fill="#0d0d0d" />
-        <circle cx="16" cy="18" r="2.4" fill="#e4a35a" />
-      </svg>
-      {!collapsed && (
-        <span className="truncate text-[15px] font-semibold tracking-tight text-ink-50">
-          HyperChat
-        </span>
-      )}
-    </div>
-  );
-}
+const GenieLampIcon = ({ size = 14, strokeWidth = 1.5 }: { size?: number; strokeWidth?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    {/* Magic wisp rising from spout */}
+    <path d="M21 8.5c.6-1.3-.8-2.2-.2-3.5" />
+    {/* Lid dome and finial */}
+    <path d="M9 12c0-2 5-2 5 0" />
+    <path d="M11.5 10V8.5" />
+    {/* Lamp body and upturned spout */}
+    <path d="M8.5 12c-2.2 0-2.5 5 1 6h4.5c3.5 0 6-3.2 8-7-2.5 1.3-5 1.5-7.5 1H8.5Z" />
+    {/* Handle */}
+    <path d="M7.2 12.6C4.5 11.4 2.5 13.4 3.5 15.8c.7 1.5 2.5 1.1 3.7.4" />
+    {/* Pedestal base */}
+    <path d="M9.5 18l-1 2.5h6l-1-2.5" />
+    <path d="M7.5 20.5h8" />
+  </svg>
+);
 
 interface SidebarProps {
   chats: ChatSession[];
   projects: Project[];
   currentView: ViewState;
   activeChatId: string | null;
-  activeProjectId: string | null;
-  isOpen: boolean;
-  onToggleSidebar: () => void;
+  activeProjectId?: string | null;
+  isOpen?: boolean;
+  onToggleSidebar?: () => void;
   onNewChat: () => void;
   onViewAllChats: () => void;
   onViewProjects: () => void;
-  onViewSkills: () => void;
-  onViewAgents: () => void;
+  onViewSkills?: () => void;
+  onViewAgents?: () => void;
   onSelectChat: (id: string) => void;
   onDeleteChat: (id: string) => void;
   onToggleFlag: (id: string) => void;
   onRenameChat: (id: string, newTitle: string) => void;
   onSelectProject: (id: string) => void;
-  onWorkOnProject: (project: Project) => void;
+  onWorkOnProject?: (project: Project) => void;
   onDeleteProject: (id: string) => void;
   onToggleProjectFlag: (id: string) => void;
   onRenameProject: (id: string, newTitle: string) => void;
@@ -64,7 +76,7 @@ export default function Sidebar({
   currentView,
   activeChatId,
   activeProjectId,
-  isOpen,
+  isOpen: controlledIsOpen,
   onToggleSidebar,
   onNewChat,
   onViewAllChats,
@@ -79,245 +91,538 @@ export default function Sidebar({
   onWorkOnProject,
   onDeleteProject,
   onToggleProjectFlag,
-  onRenameProject,
+  onRenameProject
 }: SidebarProps) {
-  const [renaming, setRenaming] = useState<{ kind: 'chat' | 'project'; id: string; current: string } | null>(null);
-  const [renameValue, setRenameValue] = useState('');
+  const [internalIsOpen, setInternalIsOpen] = useState(true);
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
+  const handleToggleOpen = () => {
+    if (onToggleSidebar) {
+      onToggleSidebar();
+    } else {
+      setInternalIsOpen(!internalIsOpen);
+    }
+  };
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [isSignoutModalOpen, setIsSignoutModalOpen] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const userButtonRef = useRef<HTMLButtonElement>(null);
+  const userMenuPopupRef = useRef<HTMLDivElement>(null);
+  const [userMenuPos, setUserMenuPos] = useState<{ bottom: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    setUserMenuOpen(false);
+  }, [isOpen]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      const isUserMenuClick = 
+        (userMenuRef.current && userMenuRef.current.contains(target)) ||
+        (userMenuPopupRef.current && userMenuPopupRef.current.contains(target));
+      if (!isUserMenuClick) {
+        setUserMenuOpen(false);
+      }
+      // Also close context menus
+      const isMenuClick = (event.target as Element).closest('.sidebar-context-menu');
+      if (!isMenuClick) {
+        setActiveMenuId(null);
+      }
+    }
+
+    const handleResize = () => {
+      setUserMenuOpen(false);
+      setActiveMenuId(null);
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  const handleToggleUserMenu = () => {
+    if (!userMenuOpen) {
+      if (userButtonRef.current) {
+        const rect = userButtonRef.current.getBoundingClientRect();
+        setUserMenuPos({
+          bottom: window.innerHeight - rect.top + 8,
+          left: rect.left,
+          width: isOpen ? rect.width : 240,
+        });
+      }
+      setUserMenuOpen(true);
+    } else {
+      setUserMenuOpen(false);
+    }
+  };
 
   const flaggedChats = chats.filter(c => c.isFlagged && !c.isGhost);
   const flaggedProjects = projects.filter(p => p.isFlagged);
-  const recentChats = chats.filter(c => !c.isGhost).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 20);
+  const recentChats = [...chats].filter(c => !c.isGhost).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 30);
 
-  const isProjectsActive = currentView === 'projects' || currentView === 'project_details';
+  const renderProjectItem = (project: Project, category: string) => {
+    const menuId = `${project.id}-${category}`;
+    const isActive = currentView === 'project_details' && activeProjectId === project.id;
+    return (
+    <div
+      key={menuId}
+      className={`flex items-center justify-between group px-3 py-2 rounded-lg text-sm transition-colors duration-150 text-left w-full cursor-pointer relative ${
+        isActive 
+          ? 'bg-[#27272a] text-white font-medium border border-white/10 shadow-sm' 
+          : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200 border border-transparent'
+      } ${activeMenuId === menuId ? 'z-50' : 'z-0'}`}
+      onClick={() => onSelectProject(project.id)}
+    >
+      <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden pr-6">
+        <Folder size={14} className="flex-shrink-0" />
+        <span className="truncate block w-full">{project.name}</span>
+      </div>
+      
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+          setActiveMenuId(activeMenuId === menuId ? null : menuId);
+        }}
+        className={`absolute right-1 p-1 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-[#333] transition-all ${activeMenuId === menuId ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+      >
+        <MoreVertical size={14} strokeWidth={2} />
+      </button>
+
+      {activeMenuId === menuId && menuPos && createPortal(
+        <div 
+          className="fixed bg-[#222] border border-[#333] rounded-lg shadow-xl shadow-black/50 py-1 w-40 z-[100] flex flex-col animate-in fade-in zoom-in-95 duration-100 sidebar-context-menu"
+          style={{ top: menuPos.top, right: menuPos.right }}
+        >
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onWorkOnProject) {
+                onWorkOnProject(project);
+              } else {
+                onSelectProject(project.id);
+              }
+              setActiveMenuId(null);
+            }}
+            className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-[#333] hover:text-white text-left w-full whitespace-nowrap"
+          >
+            <FolderOpen size={14} strokeWidth={2} />
+            Work on it
+          </button>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleProjectFlag(project.id);
+              setActiveMenuId(null);
+            }}
+            className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-[#333] hover:text-white text-left w-full whitespace-nowrap"
+          >
+            <Flag size={14} strokeWidth={2} />
+            {project.isFlagged ? 'Unflag' : 'Flag'}
+          </button>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              const newTitle = prompt('Enter new project name:', project.name);
+              if (newTitle) onRenameProject(project.id, newTitle);
+              setActiveMenuId(null);
+            }}
+            className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-[#333] hover:text-white text-left w-full"
+          >
+            <Edit2 size={14} strokeWidth={2} />
+            Rename
+          </button>
+          <div className="h-px bg-[#333] my-1 mx-2" />
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteProject(project.id);
+              setActiveMenuId(null);
+            }}
+            className="flex items-center gap-3 px-3 py-2 text-sm text-red-400 hover:bg-[#333] hover:text-red-300 text-left w-full"
+          >
+            <Trash2 size={14} strokeWidth={2} />
+            Delete
+          </button>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+  }
+
+  const renderChatItem = (chat: ChatSession, category: string) => {
+    const menuId = `${chat.id}-${category}`;
+    const isActive = activeChatId === chat.id && currentView === 'chat';
+    return (
+    <div
+      key={menuId}
+      className={`flex items-center justify-between group px-3 py-2 rounded-lg text-sm transition-colors duration-150 text-left w-full cursor-pointer relative ${
+        isActive 
+          ? 'bg-[#27272a] text-white font-medium border border-white/10 shadow-sm' 
+          : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200 border border-transparent'
+      } ${activeMenuId === menuId ? 'z-50' : 'z-0'}`}
+      onClick={() => onSelectChat(chat.id)}
+    >
+      <div className="flex-1 min-w-0 overflow-hidden pr-6">
+        <span className="truncate block w-full">{chat.title}</span>
+      </div>
+      
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+          setActiveMenuId(activeMenuId === menuId ? null : menuId);
+        }}
+        className={`absolute right-1 p-1 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-[#333] transition-all ${activeMenuId === menuId ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+      >
+        <MoreVertical size={14} strokeWidth={2} />
+      </button>
+
+      {activeMenuId === menuId && menuPos && createPortal(
+        <div 
+          className="fixed bg-[#222] border border-[#333] rounded-lg shadow-xl shadow-black/50 py-1 w-36 z-[100] flex flex-col animate-in fade-in zoom-in-95 duration-100 sidebar-context-menu"
+          style={{ top: menuPos.top, right: menuPos.right }}
+        >
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFlag(chat.id);
+              setActiveMenuId(null);
+            }}
+            className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-[#333] hover:text-white text-left w-full"
+          >
+            <Flag size={14} strokeWidth={2} />
+            {chat.isFlagged ? 'Unflag' : 'Flag'}
+          </button>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              const newTitle = prompt('Enter new title:', chat.title);
+              if (newTitle) onRenameChat(chat.id, newTitle);
+              setActiveMenuId(null);
+            }}
+            className="flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-[#333] hover:text-white text-left w-full"
+          >
+            <Edit2 size={14} strokeWidth={2} />
+            Rename
+          </button>
+          <div className="h-px bg-[#333] my-1 mx-2" />
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteChat(chat.id);
+              setActiveMenuId(null);
+            }}
+            className="flex items-center gap-3 px-3 py-2 text-sm text-red-400 hover:bg-[#333] hover:text-red-300 text-left w-full"
+          >
+            <Trash2 size={14} strokeWidth={2} />
+            Delete
+          </button>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+  }
+
+  const isNewChatActive = currentView === 'new';
+  const isHistoryActive = currentView === 'all';
+  const isProjectsActive = currentView === 'projects' || (currentView === 'project_details' && !activeChatId && !activeProjectId);
   const isSkillsActive = currentView === 'skills' || currentView === 'skill_editor';
-  const isAgentsActive = currentView === 'agents' || currentView === 'agent_template' || currentView === 'agent_chat';
+  const isAgentsActive = currentView === 'agents' || currentView === 'agent_chat';
 
-  const navItems: { label: string; icon: React.ReactNode; active: boolean; onClick: () => void }[] = [
-    { label: 'New chat', icon: <MessageSquarePlus size={16} strokeWidth={1.75} />, active: currentView === 'new', onClick: onNewChat },
-    { label: 'History', icon: <History size={16} strokeWidth={1.75} />, active: currentView === 'all' || currentView === 'chat', onClick: onViewAllChats },
-    { label: 'Projects', icon: <Folder size={16} strokeWidth={1.75} />, active: isProjectsActive, onClick: onViewProjects },
-    { label: 'Skills', icon: <FilePenLine size={16} strokeWidth={1.75} />, active: isSkillsActive, onClick: onViewSkills },
-    { label: 'Agents', icon: <Bot size={16} strokeWidth={1.75} />, active: isAgentsActive, onClick: onViewAgents },
-  ];
-
-  const submitRename = () => {
-    if (renaming && renameValue.trim()) {
-      if (renaming.kind === 'chat') onRenameChat(renaming.id, renameValue.trim());
-      else onRenameProject(renaming.id, renameValue.trim());
-    }
-    setRenaming(null);
-  };
-
-  const chatMenuItems = (chat: ChatSession) => [
-    {
-      label: chat.isFlagged ? 'Unflag' : 'Flag',
-      icon: <Flag size={14} />,
-      onSelect: () => onToggleFlag(chat.id),
-    },
-    {
-      label: 'Rename',
-      icon: <Pencil size={14} />,
-      onSelect: () => { setRenaming({ kind: 'chat', id: chat.id, current: chat.title }); setRenameValue(chat.title); },
-    },
-    {
-      label: 'Delete',
-      icon: <Trash2 size={14} />,
-      danger: true,
-      separatorBefore: true,
-      onSelect: () => onDeleteChat(chat.id),
-    },
-  ];
-
-  const projectMenuItems = (project: Project) => [
-    {
-      label: 'Work on it',
-      icon: <Folder size={14} />,
-      onSelect: () => onWorkOnProject(project),
-    },
-    {
-      label: project.isFlagged ? 'Unflag' : 'Flag',
-      icon: <Flag size={14} />,
-      onSelect: () => onToggleProjectFlag(project.id),
-    },
-    {
-      label: 'Rename',
-      icon: <Pencil size={14} />,
-      onSelect: () => { setRenaming({ kind: 'project', id: project.id, current: project.name }); setRenameValue(project.name); },
-    },
-    {
-      label: 'Delete',
-      icon: <Trash2 size={14} />,
-      danger: true,
-      separatorBefore: true,
-      onSelect: () => onDeleteProject(project.id),
-    },
-  ];
-
-  const rowClasses = (active: boolean) =>
-    `group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] transition-colors ${
-      active
-        ? 'bg-white/[0.07] text-ink-50'
-        : 'text-ink-200 hover:bg-white/[0.04] hover:text-ink-50'
-    }`;
-
-  const renderChatRow = (chat: ChatSession, section: string) => {
-    const active = activeChatId === chat.id && currentView === 'chat';
-    return (
-      <div key={`${chat.id}-${section}`} className={rowClasses(active)} onClick={() => onSelectChat(chat.id)} role="button">
-        {chat.isFlagged && <Flag size={12} className="shrink-0 text-amber-400/80" strokeWidth={2.25} />}
-        {chat.isGhost && <Ghost size={12} className="shrink-0 text-ink-300" strokeWidth={2} />}
-        <span className="min-w-0 flex-1 truncate">{chat.title}</span>
-        <Menu items={chatMenuItems(chat)}>
-          {({ open, toggle }) => (
-            <button
-              onClick={toggle}
-              className={`shrink-0 rounded-md p-1 text-ink-300 transition-all hover:bg-white/[0.08] hover:text-ink-50 ${
-                open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-              aria-label="Chat options"
-            >
-              <MoreHorizontal size={15} />
-            </button>
-          )}
-        </Menu>
+  const renderNavItem = (
+    label: string,
+    icon: React.ReactNode,
+    isActive: boolean,
+    onClick: () => void,
+    title?: string
+  ) => (
+    <button 
+      onClick={onClick}
+      className={`flex items-center rounded-lg text-left w-full h-10 group cursor-pointer relative px-2.5 transition-colors duration-150 ${
+        isActive 
+          ? 'bg-[#27272a] text-white font-medium' 
+          : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
+      }`}
+      title={!isOpen ? (title || label) : undefined}
+    >
+      <div className="flex items-center min-w-0 overflow-hidden relative z-10 w-full">
+        <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors duration-150 ${
+            isActive
+              ? 'bg-[#38383c] border border-white/20 text-white shadow-inner' 
+              : 'bg-[#181818] border border-[#262626] text-zinc-400 group-hover:bg-[#202022] group-hover:border-[#38383c] group-hover:text-zinc-200'
+          }`}>
+            {icon}
+          </div>
+        </div>
+        {isOpen && (
+          <span 
+            className={`whitespace-nowrap text-sm ml-2.5 overflow-hidden truncate ${
+              isActive ? 'font-medium text-white' : 'font-normal text-zinc-400 group-hover:text-zinc-200'
+            }`}
+          >
+            {label}
+          </span>
+        )}
       </div>
-    );
-  };
-
-  const renderProjectRow = (project: Project, section: string) => {
-    const active = activeProjectId === project.id && currentView === 'project_details';
-    return (
-      <div key={`${project.id}-${section}`} className={rowClasses(active)} onClick={() => onSelectProject(project.id)} role="button">
-        <Folder size={14} className="shrink-0 text-ink-300" strokeWidth={1.75} />
-        <span className="min-w-0 flex-1 truncate">{project.name}</span>
-        <Menu items={projectMenuItems(project)}>
-          {({ open, toggle }) => (
-            <button
-              onClick={toggle}
-              className={`shrink-0 rounded-md p-1 text-ink-300 transition-all hover:bg-white/[0.08] hover:text-ink-50 ${
-                open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-              aria-label="Project options"
-            >
-              <MoreHorizontal size={15} />
-            </button>
-          )}
-        </Menu>
-      </div>
-    );
-  };
-
-  const sectionLabel = 'px-3 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wider text-ink-300';
+    </button>
+  );
 
   return (
-    <>
-      <aside
-        className={`flex h-full shrink-0 select-none flex-col border-r border-ink-700 bg-ink-950 transition-[width] duration-200 ${
-          isOpen ? 'w-[264px]' : 'w-[68px]'
-        }`}
-      >
-        {/* Header */}
-        <div className="flex h-14 shrink-0 items-center justify-between px-3">
-          {isOpen ? (
-            <button onClick={onNewChat} className="cursor-pointer" title="New chat">
-              <Logo collapsed={false} />
-            </button>
-          ) : (
-            <button onClick={onNewChat} title="New chat" className="cursor-pointer">
-              <Logo collapsed />
-            </button>
-          )}
-          <button
-            onClick={onToggleSidebar}
-            className="icon-btn shrink-0"
-            title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-          >
-            {isOpen ? <PanelLeftClose size={17} strokeWidth={1.75} /> : <PanelLeftOpen size={17} strokeWidth={1.75} />}
-          </button>
-        </div>
-
-        {/* Nav + lists */}
-        <div className="no-scrollbar flex-1 overflow-y-auto overflow-x-hidden px-2 pb-2">
-          <div className="flex flex-col gap-0.5 pt-1">
-            {navItems.map(item => (
-              <button
-                key={item.label}
-                onClick={item.onClick}
-                className={`flex h-9 w-full items-center gap-3 rounded-lg px-3 text-[13.5px] transition-colors ${
-                  item.active
-                    ? 'bg-white/[0.07] font-medium text-ink-50'
-                    : 'text-ink-200 hover:bg-white/[0.04] hover:text-ink-50'
-                } ${!isOpen ? 'justify-center px-0' : ''}`}
-                title={!isOpen ? item.label : undefined}
-              >
-                <span className="shrink-0">{item.icon}</span>
-                {isOpen && <span className="truncate text-left">{item.label}</span>}
-              </button>
-            ))}
-          </div>
-
+    <aside 
+      className={`flex flex-col h-full bg-[#111] border-r border-[#222] flex-shrink-0 overflow-hidden select-none relative ${
+        isOpen ? 'w-[290px]' : 'w-16'
+      }`}
+    >
+      <div className="flex items-center justify-between px-3 h-[60px] flex-shrink-0 overflow-hidden">
+        <div className="flex items-center min-w-0 overflow-hidden">
           {isOpen && (
-            <div className="mt-1 flex flex-col">
-              {(flaggedProjects.length > 0 || flaggedChats.length > 0) && (
-                <div>
-                  <div className={sectionLabel}>Flagged</div>
-                  <div className="flex flex-col gap-0.5">
-                    {flaggedProjects.map(p => renderProjectRow(p, 'flagged'))}
-                    {flaggedChats.map(c => renderChatRow(c, 'flagged'))}
-                  </div>
-                </div>
-              )}
-              {recentChats.length > 0 && (
-                <div>
-                  <div className={sectionLabel}>Recents</div>
-                  <div className="flex flex-col gap-0.5">{recentChats.map(c => renderChatRow(c, 'recent'))}</div>
-                </div>
-              )}
-            </div>
+            <button
+              onClick={onNewChat}
+              className="text-2xl font-semibold text-zinc-100 tracking-wide font-serif whitespace-nowrap overflow-hidden hover:text-white text-left ml-1 cursor-pointer"
+            >
+              Hypervisor
+            </button>
+          )}
+        </div>
+        <button 
+          onClick={handleToggleOpen}
+          className="w-10 h-10 flex items-center justify-center hover:bg-white/[0.06] rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors flex-shrink-0 cursor-pointer"
+          title={isOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
+        >
+          {isOpen ? <PanelLeftClose size={20} strokeWidth={1.5} /> : <PanelLeftOpen size={20} strokeWidth={1.5} />}
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar py-2 flex flex-col gap-6 px-3">
+        <div className="flex flex-col gap-1 w-full flex-shrink-0">
+          {renderNavItem(
+            "New chat",
+            <MessageSquarePlus size={14} strokeWidth={1.5} />,
+            isNewChatActive,
+            onNewChat
+          )}
+          
+          {renderNavItem(
+            "History",
+            <MessagesSquare size={14} strokeWidth={1.5} />,
+            isHistoryActive,
+            onViewAllChats
+          )}
+          
+          {renderNavItem(
+            "Projects",
+            <Folder size={14} strokeWidth={1.5} />,
+            isProjectsActive,
+            onViewProjects
+          )}
+          
+          {renderNavItem(
+            "Skills",
+            <FilePenLine size={14} strokeWidth={1.5} />,
+            isSkillsActive,
+            onViewSkills || (() => {})
+          )}
+
+          {renderNavItem(
+            "Agents",
+            <Bot size={14} strokeWidth={1.5} />,
+            isAgentsActive,
+            onViewAgents || (() => {})
+          )}
+
+          {renderNavItem(
+            "Genie",
+            <GenieLampIcon size={14} strokeWidth={1.5} />,
+            false,
+            () => {}
           )}
         </div>
 
-        {/* Footer / user */}
-        <div className="shrink-0 border-t border-ink-700 p-3">
-          <div className={`flex items-center gap-2.5 rounded-lg px-1 py-1 ${!isOpen ? 'justify-center' : ''}`}>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-ink-600 to-ink-750 text-[11px] font-semibold text-ink-50 ring-1 ring-ink-600">
-              SH
-            </div>
-            {isOpen && (
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-medium text-ink-100">Sreehari H</div>
-                <div className="text-[11px] text-ink-300">Free plan</div>
+        {isOpen && (
+          <div className="flex flex-col gap-6 min-h-0 min-w-0 w-full overflow-hidden">
+            {(flaggedChats.length > 0 || flaggedProjects.length > 0) && (
+              <div className="flex flex-col gap-0.5 w-full min-w-0">
+                <div className="text-xs font-medium text-zinc-500 tracking-wider px-3 mb-1 whitespace-nowrap">
+                  Flagged
+                </div>
+                {flaggedProjects.map(project => renderProjectItem(project, 'flagged'))}
+                {flaggedChats.map(chat => renderChatItem(chat, 'flagged'))}
+              </div>
+            )}
+
+            {recentChats.length > 0 && (
+              <div className="flex flex-col gap-0.5 w-full min-w-0">
+                <div className="text-xs font-medium text-zinc-500 tracking-wider px-3 mb-1 whitespace-nowrap">
+                  Recents
+                </div>
+                {recentChats.map(chat => renderChatItem(chat, 'recent'))}
               </div>
             )}
           </div>
-        </div>
-      </aside>
+        )}
+      </div>
 
-      {/* Rename modal */}
-      {renaming && (
-        <Modal
-          title={`Rename ${renaming.kind === 'chat' ? 'chat' : 'project'}`}
-          onClose={() => setRenaming(null)}
-          footer={
-            <>
-              <button className="btn-ghost" onClick={() => setRenaming(null)}>Cancel</button>
-              <button className="btn-primary" onClick={submitRename} disabled={!renameValue.trim()}>
-                Rename
-              </button>
-            </>
-          }
+      <div className="border-t border-[#222] p-3 flex-shrink-0 relative" ref={userMenuRef}>
+        <button 
+          ref={userButtonRef}
+          onClick={handleToggleUserMenu}
+          className="flex items-center rounded-lg hover:bg-white/[0.05] transition-colors group w-full overflow-hidden h-10 cursor-pointer px-1"
+          title={!isOpen ? "User Menu" : undefined}
         >
-          <Field label="New name">
-            <input
-              className="input-base"
-              autoFocus
-              value={renameValue}
-              onChange={e => setRenameValue(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') submitRename(); }}
-            />
-          </Field>
-        </Modal>
+          <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-medium text-zinc-200 group-hover:ring-2 ring-zinc-700 transition-colors flex-shrink-0 ml-1">
+            SH
+          </div>
+          {isOpen && (
+            <span className="text-sm font-medium text-zinc-300 group-hover:text-white whitespace-nowrap ml-3 overflow-hidden">
+              Sreehari H
+            </span>
+          )}
+        </button>
+        
+        {userMenuOpen && userMenuPos && createPortal(
+          <div 
+            ref={userMenuPopupRef}
+            className="fixed bg-[#222] border border-[#333] rounded-lg shadow-2xl overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-100"
+            style={{
+              bottom: `${userMenuPos.bottom}px`,
+              left: `${userMenuPos.left}px`,
+              width: `${userMenuPos.width}px`
+            }}
+          >
+            <div className="flex flex-col py-1">
+              <button 
+                onClick={() => setUserMenuOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-[#333] hover:text-zinc-100 transition-colors text-left whitespace-nowrap"
+              >
+                <Settings size={16} className="text-zinc-400" />
+                Settings
+              </button>
+              <button 
+                onClick={() => {
+                  setIsApiKeyModalOpen(true);
+                  setUserMenuOpen(false);
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-300 hover:bg-[#333] hover:text-zinc-100 transition-colors text-left whitespace-nowrap"
+              >
+                <Key size={16} className="text-zinc-400" />
+                Link API key
+              </button>
+              <div className="h-px bg-[#333] my-1"></div>
+              <button 
+                onClick={() => {
+                  setIsSignoutModalOpen(true);
+                  setUserMenuOpen(false);
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-[#333] hover:text-red-300 transition-colors text-left whitespace-nowrap"
+              >
+                <LogOut size={16} className="text-red-400" />
+                Logout
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
+      </div>
+
+      {/* Signout Confirmation Modal */}
+      {isSignoutModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium text-zinc-100">Logout</h2>
+              <button 
+                onClick={() => setIsSignoutModalOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-[#222] text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <X size={18} strokeWidth={1.5} />
+              </button>
+            </div>
+            <p className="text-sm text-zinc-400 mb-6">
+              Are you sure you want to log out of your account?
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button 
+                onClick={() => setIsSignoutModalOpen(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-300 hover:bg-[#2a2a2a] transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  setIsSignoutModalOpen(false);
+                  // Add actual signout logic here later
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-    </>
+
+      {/* API Key Modal */}
+      {isApiKeyModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-[#1a1a1a] border border-[#333] rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium text-zinc-100">Link API Key</h2>
+              <button 
+                onClick={() => setIsApiKeyModalOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-[#222] text-zinc-400 hover:text-zinc-200 transition-colors"
+              >
+                <X size={18} strokeWidth={1.5} />
+              </button>
+            </div>
+            
+            <div className="flex flex-col gap-4 mb-6">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-zinc-300">Endpoint <span className="text-red-400">*</span></label>
+                <input 
+                  type="text" 
+                  className="w-full bg-[#222] border border-[#333] rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500 transition-colors" 
+                />
+              </div>
+              
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-zinc-300">API Key <span className="text-red-400">*</span></label>
+                <input 
+                  type="password" 
+                  className="w-full bg-[#222] border border-[#333] rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-zinc-500 transition-colors" 
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button 
+                onClick={() => setIsApiKeyModalOpen(false)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-300 hover:bg-[#2a2a2a] transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  setIsApiKeyModalOpen(false);
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+              >
+                Link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </aside>
   );
 }
