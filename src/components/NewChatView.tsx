@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import React, { useEffect, useState } from 'react';
+import { Code2, FileText, Layers, Wrench, Sparkles, PenLine, Globe, Zap } from 'lucide-react';
 import ChatInput from './ChatInput';
 import TokenCounter from './TokenCounter';
-import { Project, Skill } from '../types';
+import { Project, Skill, getModelMaxTokens } from '../types';
 
 interface NewChatViewProps {
   onSendMessage: (message: string, isGhostMode?: boolean) => void;
@@ -18,9 +18,18 @@ interface NewChatViewProps {
   onLoadSkill?: (skill: Skill) => void;
 }
 
-export default function NewChatView({ 
-  onSendMessage, 
-  loadedProject, 
+const SUGGESTIONS = [
+  { icon: <Code2 size={14} />, label: 'Debug this stack trace' },
+  { icon: <PenLine size={14} />, label: 'Draft a technical design doc' },
+  { icon: <Layers size={14} />, label: 'Plan a full-stack feature' },
+  { icon: <Wrench size={14} />, label: 'Refactor a messy module' },
+  { icon: <Globe size={14} />, label: 'Explain an API contract' },
+  { icon: <Zap size={14} />, label: 'Write a bash automation' },
+];
+
+export default function NewChatView({
+  onSendMessage,
+  loadedProject,
   onUnloadProject,
   loadedSkill,
   onUnloadSkill,
@@ -29,68 +38,69 @@ export default function NewChatView({
   projects,
   skills,
   onLoadProject,
-  onLoadSkill
+  onLoadSkill,
 }: NewChatViewProps) {
-  const [greeting, setGreeting] = useState("How can I help you today?");
+  const [greeting, setGreeting] = useState('How can I help you today?');
   const [draftTokens, setDraftTokens] = useState(0);
-  const maxModelTokens = selectedModel === 'cisai-ultra' ? 1000000 : selectedModel === 'cisai-pro' ? 128000 : 32000;
 
   useEffect(() => {
     const hour = new Date().getHours();
     const timeOfDay = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-    
-    const dynamicGreetings = [
-      `Good ${timeOfDay}. How can I assist you?`,
-      `Good ${timeOfDay}. What shall we explore?`,
-      "How can I help you today?",
-      "What's on your mind?",
-      "Ready to begin?"
-    ];
-    
-    setGreeting(dynamicGreetings[Math.floor(Math.random() * dynamicGreetings.length)]);
+    setGreeting(`Good ${timeOfDay}, Sreehari`);
   }, []);
 
   return (
-    <div className="flex-1 flex h-full bg-[#151515] relative overflow-hidden">
-      {/* Main Chat Column */}
-      <div className="flex-1 flex flex-col h-full min-w-0 items-center justify-center p-6 relative overflow-y-auto no-scrollbar">
-        <div className="absolute top-5 right-6 z-20 pointer-events-auto flex items-center gap-2.5">
-          <TokenCounter 
-            tokens={draftTokens} 
-            maxTokens={maxModelTokens}
-          />
-        </div>
+    <div className="relative flex h-full flex-1 flex-col overflow-y-auto bg-ink-900 no-scrollbar">
+      <div className="absolute right-6 top-5 z-10">
+        <TokenCounter tokens={draftTokens} maxTokens={getModelMaxTokens(selectedModel)} />
+      </div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          className="w-full max-w-3xl flex flex-col items-center justify-center mb-12 gap-6"
-        >
-          <div className="flex items-center gap-3 text-zinc-400">
-            <h1 className="text-4xl md:text-5xl font-display text-zinc-200 tracking-tight text-center">
+      <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+        <div className="w-full max-w-[720px] animate-slide-up">
+          {/* hero */}
+          <div className="mb-8 flex flex-col items-center text-center">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-ink-750 to-ink-850 ring-1 ring-ink-600">
+              <Sparkles size={19} className="text-amber-200/90" />
+            </div>
+            <h1 className="font-serif text-[28px] font-light tracking-tight text-ink-50 md:text-[34px]">
               {greeting}
             </h1>
+            <p className="mt-2 text-[13.5px] text-ink-200">
+              Agents, projects and skills — all one conversation away.
+            </p>
           </div>
-          
-          <div className="w-full">
-            <ChatInput 
-              onSendMessage={onSendMessage} 
-              isInitial={true} 
-              loadedProject={loadedProject}
-              onUnloadProject={onUnloadProject}
-              loadedSkill={loadedSkill}
-              onUnloadSkill={onUnloadSkill}
-              selectedModel={selectedModel}
-              onSelectModel={onSelectModel}
-              projects={projects}
-              skills={skills}
-              onLoadProject={onLoadProject}
-              onLoadSkill={onLoadSkill}
-              onTokenCountChange={setDraftTokens}
-            />
+
+          {/* composer */}
+          <ChatInput
+            onSendMessage={onSendMessage}
+            isInitial
+            loadedProject={loadedProject}
+            onUnloadProject={onUnloadProject}
+            loadedSkill={loadedSkill}
+            onUnloadSkill={onUnloadSkill}
+            selectedModel={selectedModel}
+            onSelectModel={onSelectModel}
+            projects={projects}
+            skills={skills}
+            onLoadProject={onLoadProject}
+            onLoadSkill={onLoadSkill}
+            onTokenCountChange={setDraftTokens}
+          />
+
+          {/* suggestion chips */}
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {SUGGESTIONS.map(s => (
+              <button
+                key={s.label}
+                onClick={() => onSendMessage(s.label)}
+                className="flex items-center gap-2 rounded-full border border-ink-600 bg-ink-850/60 px-3.5 py-1.5 text-[12.5px] text-ink-100 transition-all hover:border-ink-400 hover:bg-ink-750 hover:text-ink-50 active:scale-[0.97]"
+              >
+                <span className="text-ink-300">{s.icon}</span>
+                {s.label}
+              </button>
+            ))}
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

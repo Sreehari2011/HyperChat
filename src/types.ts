@@ -67,7 +67,6 @@ export interface ProjectFile {
   size?: string;
   tokens?: number | string;
   content?: string;
-  commitMessage?: string;
   timeAgo?: string;
 }
 
@@ -79,7 +78,6 @@ export interface Project {
   updatedAt: number;
   dateString?: string;
   files?: ProjectFile[];
-  syncFiles?: ProjectFile[];
   isFlagged?: boolean;
 }
 
@@ -109,7 +107,6 @@ export interface Agent {
   description: string;
   instructions?: string;
   model?: string;
-  avatarColor?: string;
   author?: string;
   updatedAt: number;
   dateString?: string;
@@ -118,4 +115,29 @@ export interface Agent {
   category?: 'builtin' | 'custom';
 }
 
-export type ViewState = 'new' | 'all' | 'chat' | 'projects' | 'project_details' | 'skills' | 'skill_editor' | 'agents' | 'agent_template' | 'agent_chat';
+export interface ChatModelInfo {
+  id: string;
+  label: string;
+  description: string;
+  maxTokens: number;
+}
+
+export const CHAT_MODELS: ChatModelInfo[] = [
+  { id: 'cisai-lite', label: 'HyperChat Lite', description: 'Fast responses for everyday tasks', maxTokens: 32_000 },
+  { id: 'cisai-pro', label: 'HyperChat Pro', description: 'Balanced reasoning and speed', maxTokens: 128_000 },
+  { id: 'cisai-ultra', label: 'HyperChat Ultra', description: 'Deep reasoning for complex work', maxTokens: 1_000_000 },
+];
+
+export function getModelMaxTokens(modelId: string | undefined): number {
+  return CHAT_MODELS.find(m => m.id === modelId)?.maxTokens ?? 32_000;
+}
+
+export function getModelLabel(modelId: string | undefined): string {
+  return CHAT_MODELS.find(m => m.id === modelId)?.label ?? 'HyperChat Lite';
+}
+
+export type ViewState =
+  | 'new' | 'all' | 'chat'
+  | 'projects' | 'project_details'
+  | 'skills' | 'skill_editor'
+  | 'agents' | 'agent_template' | 'agent_chat';

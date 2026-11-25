@@ -6,16 +6,16 @@ export function formatRelativeTime(date: number | Date): string {
   const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
 
   if (diffInSeconds < 60) return 'Just now';
-  
+
   const diffInMinutes = Math.floor(diffInSeconds / 60);
   if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`;
-  
+
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
-  
+
   const diffInDays = Math.floor(diffInHours / 24);
   if (diffInDays < 30) return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
-  
+
   const diffInMonths = Math.floor(diffInDays / 30);
   if (diffInMonths < 12) {
     return past.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -80,9 +80,6 @@ export function formatProjectContent(project: Project): string {
   if (project.instructions) {
     output += `Instructions: ${project.instructions}\n`;
   }
-  if (project.dateString) {
-    output += `Last Modified: ${project.dateString}\n`;
-  }
   if (project.files && project.files.length > 0) {
     output += `Files and Contents:\n`;
     for (const file of project.files) {
@@ -146,11 +143,20 @@ export function formatAgentContent(agent: Agent): string {
   return output;
 }
 
-export function stripHiddenProjectDetails(text: string): string {
+export function stripHiddenContext(text: string): string {
   if (!text) return '';
   return text
     .replace(/\[PROJECT CONTEXT:[\s\S]*?\[END PROJECT CONTEXT\]\s*/g, '')
     .replace(/\[SKILL CONTEXT:[\s\S]*?\[END SKILL CONTEXT\]\s*/g, '')
     .replace(/\[AGENT CONTEXT:[\s\S]*?\[END AGENT CONTEXT\]\s*/g, '')
     .trim();
+}
+
+/** Token-usage progress arc shared by ChatInput + TokenCounter (single source of truth). */
+export function tokenProgressRatio(tokens: number, maxTokens: number): number {
+  if (tokens <= 0) return 0;
+  const normalized = Math.min(tokens / maxTokens, 1);
+  const logRatio = Math.min(1, Math.log10(tokens + 1) / Math.log10(maxTokens + 1));
+  const ratio = 0.65 * logRatio + 0.35 * Math.sqrt(normalized);
+  return Math.min(1, Math.max(0.06, ratio));
 }

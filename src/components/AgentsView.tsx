@@ -1,529 +1,272 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
+import { Search, MoreVertical, Bot, Pencil, Trash2, Plus, MessageSquare, Settings2 } from 'lucide-react';
 import { Agent } from '../types';
-import { 
-  Search, 
-  MoreHorizontal, 
-  Trash2, 
-  X, 
-  Edit3
-} from 'lucide-react';
+import { Menu, ConfirmDialog, Modal, Field, Toast } from './ui';
 
 interface AgentsViewProps {
   agents: Agent[];
-  onCreateAgent: (name: string, description: string, instructions: string, model?: string) => void;
+  onCreateAgent: (name: string, description: string, instructions: string) => void;
   onUpdateAgent: (id: string, updates: Partial<Agent>) => void;
   onDeleteAgent: (id: string) => void;
-  onSelectAgent?: (agent: Agent) => void;
+  onSelectAgent: (agent: Agent) => void;
+  onConfigureAgent: (agent: Agent) => void;
 }
+
+type TabType = 'library' | 'created' | 'builtin';
 
 export default function AgentsView({
   agents,
   onCreateAgent,
   onUpdateAgent,
   onDeleteAgent,
-  onSelectAgent
+  onSelectAgent,
+  onConfigureAgent,
 }: AgentsViewProps) {
-  const [activeTab, setActiveTab] = useState<'library' | 'created' | 'builtin'>('library');
+  const [activeTab, setActiveTab] = useState<TabType>('library');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Menu dropdown state
-  const [activeMenuAgentId, setActiveMenuAgentId] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // Modals
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newAgentName, setNewAgentName] = useState('');
-  const [newAgentDescription, setNewAgentDescription] = useState('');
-  const [newAgentInstructions, setNewAgentInstructions] = useState('');
-  const [newAgentModel, setNewAgentModel] = useState('Gemini 2.5 Flash');
-
-  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editInstructions, setEditInstructions] = useState('');
-
-  const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<Agent | null>(null);
+  const [deleting, setDeleting] = useState<Agent | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Close dropdown menu on outside click or scroll
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setActiveMenuAgentId(null);
-      }
-    };
-    const handleScroll = () => {
-      setActiveMenuAgentId(null);
-    };
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newInstructions, setNewInstructions] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editInstructions, setEditInstructions] = useState('');
 
-    if (activeMenuAgentId) {
-      document.addEventListener('mousedown', handleClickOutside);
-      window.addEventListener('scroll', handleScroll, true);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
-    };
-  }, [activeMenuAgentId]);
+  const flash = (msg: string) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 2500);
+  };
 
-  // Filter agents based on search query and active tab
   const filteredAgents = agents.filter(agent => {
     if (activeTab === 'builtin' && agent.category !== 'builtin') return false;
     if (activeTab === 'created' && agent.category === 'builtin') return false;
     if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase();
     return (
-      agent.name.toLowerCase().includes(query) ||
-      agent.description.toLowerCase().includes(query) ||
-      (agent.instructions && agent.instructions.toLowerCase().includes(query)) ||
-      (agent.model && agent.model.toLowerCase().includes(query))
+      agent.name.toLowerCase().includes(q) ||
+      agent.description.toLowerCase().includes(q)
     );
   });
 
-  const handleOpenMenu = (e: React.MouseEvent, agentId: string) => {
-    e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    setMenuPosition({
-      top: rect.bottom + 6,
-      right: window.innerWidth - rect.right
-    });
-    setActiveMenuAgentId(activeMenuAgentId === agentId ? null : agentId);
+  const submitCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim() || !newDesc.trim()) return;
+    onCreateAgent(newName.trim(), newDesc.trim(), newInstructions.trim());
+    setNewName('');
+    setNewDesc('');
+    setNewInstructions('');
+    setIsCreateOpen(false);
+    flash(`Created agent "${newName.trim()}"`);
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const submitEdit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAgentName.trim() || !newAgentDescription.trim()) return;
-    onCreateAgent(
-      newAgentName.trim(),
-      newAgentDescription.trim(),
-      newAgentInstructions.trim(),
-      newAgentModel
-    );
-    setNewAgentName('');
-    setNewAgentDescription('');
-    setNewAgentInstructions('');
-    setIsCreateModalOpen(false);
-    setNotification(`Created agent "${newAgentName.trim()}"`);
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const handleEditSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingAgent || !editName.trim() || !editDescription.trim()) return;
-    onUpdateAgent(editingAgent.id, {
+    if (!editing || !editName.trim() || !editDesc.trim()) return;
+    onUpdateAgent(editing.id, {
       name: editName.trim(),
-      description: editDescription.trim(),
+      description: editDesc.trim(),
       instructions: editInstructions.trim(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
     });
-    setEditingAgent(null);
-    setNotification(`Updated agent "${editName.trim()}"`);
-    setTimeout(() => setNotification(null), 3000);
+    setEditing(null);
+    flash(`Updated agent "${editName.trim()}"`);
   };
 
-  const handleDeleteConfirm = () => {
-    if (deletingAgent) {
-      onDeleteAgent(deletingAgent.id);
-      setNotification(`Deleted agent "${deletingAgent.name}"`);
-      setDeletingAgent(null);
-      setTimeout(() => setNotification(null), 3000);
-    }
-  };
-
-  const activeAgentForMenu = agents.find(a => a.id === activeMenuAgentId);
+  const tabs: { id: TabType; label: string }[] = [
+    { id: 'library', label: 'Library' },
+    { id: 'created', label: 'Created by me' },
+    { id: 'builtin', label: 'Builtin' },
+  ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#151515] text-[#e4e4e7] overflow-y-auto no-scrollbar">
-      <div className="max-w-6xl w-full mx-auto px-6 sm:px-8 py-8 flex flex-col h-full">
-        
-        {/* Notification Toast */}
-        {notification && (
-          <div className="fixed top-4 right-8 bg-[#222] border border-[#333] text-zinc-200 text-xs px-3.5 py-2 rounded-lg shadow-xl z-50 animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            {notification}
-          </div>
-        )}
+    <div className="no-scrollbar flex h-full flex-1 flex-col overflow-y-auto bg-ink-900">
+      {notification && <Toast message={notification} />}
 
-        {/* Top Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-serif text-zinc-100">Agents</h1>
-        </div>
-
-        {/* Subheader Row: Tab "All" on Left, Search bar + Create Agent button on Right */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6">
-          
-          {/* Tabs: Library, Created by Me, Builtin */}
-          <div className="flex items-center gap-1 self-start">
-            <button
-              onClick={() => {
-                setActiveTab('library');
-                setActiveMenuAgentId(null);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'library'
-                  ? 'bg-[#252525] text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Library
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('created');
-                setActiveMenuAgentId(null);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'created'
-                  ? 'bg-[#252525] text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Created by Me
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('builtin');
-                setActiveMenuAgentId(null);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                activeTab === 'builtin'
-                  ? 'bg-[#252525] text-white'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Builtin
-            </button>
-          </div>
-
-          {/* Search bar + Create Agent Button */}
+      <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-6 py-8">
+        {/* header */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <h1 className="font-serif text-[22px] font-light text-ink-50">Agents</h1>
           <div className="flex items-center gap-3">
-            <div className="relative group">
-              <Search 
-                size={16} 
-                strokeWidth={2} 
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-zinc-300 transition-colors" 
-              />
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
               <input
-                type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search agents..."
-                className="bg-[#222] border border-[#333] rounded-full py-1.5 pl-9 pr-4 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-all w-[180px] focus:w-[240px]"
+                placeholder="Search agents…"
+                className="search-input"
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                >
-                  <X size={12} />
-                </button>
-              )}
             </div>
-
-            <button
-              id="create-agent-btn"
-              onClick={() => {
-                setNewAgentName('');
-                setNewAgentDescription('');
-                setNewAgentInstructions('');
-                setNewAgentModel('Gemini 2.5 Flash');
-                setIsCreateModalOpen(true);
-              }}
-              className="bg-zinc-100 hover:bg-white text-zinc-900 font-medium px-4 py-1.5 rounded-full text-sm transition-colors cursor-pointer shadow-xs whitespace-nowrap"
-            >
-              Create Agent
+            <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>
+              <Plus size={15} /> New agent
             </button>
           </div>
         </div>
 
-        {/* Content Area: 2 Columns Agent Cards */}
+        {/* tabs */}
+        <div className="mb-6 flex items-center gap-1 border-b border-ink-800 pb-3">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded-lg px-3 py-1.5 text-[12.5px] font-medium transition-colors ${
+                activeTab === tab.id ? 'bg-white/[0.07] text-ink-50' : 'text-ink-200 hover:bg-white/[0.04] hover:text-ink-100'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* cards */}
         <div className="flex-1 pb-12">
           {filteredAgents.length === 0 ? (
-            <div className="text-center text-zinc-500 mt-20 text-sm">
-              {searchQuery 
-                ? `No agents matching "${searchQuery}".` 
-                : 'No agents created'}
+            <div className="mt-20 flex flex-col items-center gap-3 text-center">
+              <Bot size={26} className="text-ink-400" />
+              <p className="text-sm text-ink-200">
+                {searchQuery
+                  ? `No agents matching "${searchQuery}"`
+                  : activeTab === 'created'
+                    ? 'No agents created yet — build a specialist with its own instructions.'
+                    : 'No agents here yet.'}
+              </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {filteredAgents.map(agent => (
                 <div
                   key={agent.id}
-                  onClick={() => onSelectAgent?.(agent)}
-                  className={`bg-[#181818] border border-[#262626] rounded-xl p-4 flex flex-col justify-between transition-colors group relative hover:border-[#383838] ${
-                    onSelectAgent ? 'cursor-pointer' : ''
-                  }`}
+                  className="card group flex cursor-pointer flex-col p-4"
+                  onClick={() => onSelectAgent(agent)}
                 >
-                  <div>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3 className="text-sm font-medium text-zinc-100 truncate min-w-0">
-                          {agent.name}
-                        </h3>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide shrink-0 ${
-                          agent.category === 'builtin'
-                            ? 'bg-[#242424] text-zinc-400 border border-[#333]'
-                            : 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/40'
-                        }`}>
-                          {agent.category === 'builtin' ? 'Builtin' : 'Created by Me'}
-                        </span>
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-ink-600 bg-ink-750">
+                        <Bot size={15} className="text-amber-200/80" />
                       </div>
-
-                      {/* Three Dots Button - only for custom agents */}
-                      {agent.category !== 'builtin' && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleOpenMenu(e, agent.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-zinc-500 hover:text-zinc-200 hover:bg-[#252525] rounded-md cursor-pointer shrink-0"
-                          title="Agent options"
-                        >
-                          <MoreHorizontal size={15} />
-                        </button>
-                      )}
+                      <div className="min-w-0">
+                        <h3 className="truncate text-[14px] font-medium text-ink-50">{agent.name}</h3>
+                      </div>
+                      <span className={`badge shrink-0 border ${
+                        agent.category === 'builtin'
+                          ? 'border-ink-600 bg-ink-750 text-ink-200'
+                          : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300'
+                      }`}>
+                        {agent.category === 'builtin' ? 'Builtin' : 'Mine'}
+                      </span>
                     </div>
+                    <div onClick={e => e.stopPropagation()}>
+                      <Menu
+                        items={[
+                          { label: 'Chat', icon: <MessageSquare size={14} />, onSelect: () => onSelectAgent(agent) },
+                          { label: 'Configure', icon: <Settings2 size={14} />, onSelect: () => onConfigureAgent(agent) },
+                          ...(agent.category !== 'builtin'
+                            ? [
+                                { label: 'Edit', icon: <Pencil size={14} />, onSelect: () => { setEditing(agent); setEditName(agent.name); setEditDesc(agent.description || ''); setEditInstructions(agent.instructions || ''); } },
+                                { label: 'Delete', icon: <Trash2 size={14} />, danger: true, separatorBefore: true, onSelect: () => setDeleting(agent) },
+                              ]
+                            : []),
+                        ]}
+                      >
+                        {({ open, toggle }) => (
+                          <button
+                            onClick={toggle}
+                            className={`rounded-md p-1 text-ink-300 transition-all hover:bg-white/[0.08] hover:text-ink-50 ${
+                              open ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                            }`}
+                            aria-label="Agent options"
+                          >
+                            <MoreVertical size={15} />
+                          </button>
+                        )}
+                      </Menu>
+                    </div>
+                  </div>
 
-                    {/* Agent Description */}
-                    {agent.description && (
-                      <p className="text-xs text-zinc-400 mt-2 leading-relaxed line-clamp-2 font-normal">
-                        {agent.description}
-                      </p>
+                  <p className="line-clamp-2 text-[12.5px] leading-relaxed text-ink-200">{agent.description}</p>
+
+                  <div className="mt-auto flex items-center gap-2.5 pt-3 text-[11px] text-ink-300">
+                    {agent.subAgents && agent.subAgents.length > 0 && (
+                      <span>{agent.subAgents.length} sub-agent{agent.subAgents.length > 1 ? 's' : ''}</span>
                     )}
+                    <span className="ml-auto flex items-center gap-1 text-ink-200 transition-colors group-hover:text-ink-50">
+                      <MessageSquare size={11} /> Chat
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
-
       </div>
 
-      {/* Floating Context Dropdown Menu for Agent */}
-      {activeMenuAgentId && activeAgentForMenu && menuPosition && (
-        <div
-          ref={menuRef}
-          style={{
-            position: 'fixed',
-            top: `${menuPosition.top}px`,
-            right: `${menuPosition.right}px`
-          }}
-          className="bg-[#1d1d1d] border border-[#2f2f2f] rounded-xl shadow-2xl py-1.5 w-44 z-50 animate-in fade-in zoom-in-95 duration-100"
-        >
-          {activeAgentForMenu.category !== 'builtin' && (
+      {/* create modal */}
+      {isCreateOpen && (
+        <Modal
+          title="New agent"
+          subtitle="Agents run with their own instructions, tools and sub-agents."
+          onClose={() => setIsCreateOpen(false)}
+          widthClass="max-w-lg"
+          footer={
             <>
-              <button
-                onClick={() => {
-                  setEditingAgent(activeAgentForMenu);
-                  setEditName(activeAgentForMenu.name);
-                  setEditDescription(activeAgentForMenu.description || '');
-                  setEditInstructions(activeAgentForMenu.instructions || '');
-                  setActiveMenuAgentId(null);
-                }}
-                className="w-full px-3.5 py-2 text-left text-xs text-zinc-200 hover:bg-[#282828] flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <Edit3 size={13} className="text-zinc-400" />
-                <span>Edit Agent</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setDeletingAgent(activeAgentForMenu);
-                  setActiveMenuAgentId(null);
-                }}
-                className="w-full px-3.5 py-2 text-left text-xs text-rose-400 hover:bg-rose-950/20 hover:text-rose-300 flex items-center gap-2 transition-colors cursor-pointer border-t border-[#262626]"
-              >
-                <Trash2 size={13} />
-                <span>Delete Agent</span>
-              </button>
+              <button className="btn-ghost" onClick={() => setIsCreateOpen(false)}>Cancel</button>
+              <button className="btn-primary" onClick={submitCreate as unknown as () => void} disabled={!newName.trim() || !newDesc.trim()}>Create</button>
             </>
-          )}
-        </div>
-      )}
-
-      {/* Create Agent Modal */}
-      {isCreateModalOpen && (
-        <div 
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
-          onClick={() => {
-            setIsCreateModalOpen(false);
-            setNewAgentName('');
-            setNewAgentDescription('');
-          }}
+          }
         >
-          <div 
-            className="bg-[#1a1a1a] border border-[#333] rounded-2xl w-full max-w-2xl p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-200"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-medium text-zinc-100">New Agent</h2>
-              <button 
-                type="button"
-                onClick={() => {
-                  setIsCreateModalOpen(false);
-                  setNewAgentName('');
-                  setNewAgentDescription('');
-                }}
-                className="p-1.5 rounded-lg hover:bg-[#222] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-              >
-                <X size={18} strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateSubmit} className="flex flex-col">
-              <div className="flex flex-col gap-4 mb-6">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="agentName" className="text-sm font-medium text-zinc-300">
-                    Name
-                  </label>
-                  <input
-                    id="agentName"
-                    type="text"
-                    required
-                    autoFocus
-                    value={newAgentName}
-                    onChange={e => setNewAgentName(e.target.value)}
-                    placeholder="Agent name"
-                    className="bg-[#222] border border-[#333] rounded-lg px-3.5 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="agentDescription" className="text-sm font-medium text-zinc-300">
-                    Description
-                  </label>
-                  <textarea
-                    id="agentDescription"
-                    rows={6}
-                    required
-                    value={newAgentDescription}
-                    onChange={e => setNewAgentDescription(e.target.value)}
-                    placeholder="Agent description"
-                    className="bg-[#222] border border-[#333] rounded-lg px-3.5 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors min-h-[150px] resize-y"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end">
-                <button
-                  type="submit"
-                  disabled={!newAgentName.trim() || !newAgentDescription.trim()}
-                  className="px-5 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  Create
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          <form onSubmit={submitCreate}>
+            <Field label="Name">
+              <input className="input-base" autoFocus value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Code Reviewer" />
+            </Field>
+            <Field label="Description">
+              <textarea className="input-base min-h-[70px] resize-y" rows={3} value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="What does this agent specialize in?" />
+            </Field>
+            <Field label="Instructions" hint="optional">
+              <textarea className="input-base min-h-[90px] resize-y" rows={4} value={newInstructions} onChange={e => setNewInstructions(e.target.value)} placeholder="Core guidelines and directives for this agent…" />
+            </Field>
+          </form>
+        </Modal>
       )}
 
-      {/* Edit Agent Modal */}
-      {editingAgent && (
-        <div 
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
-          onClick={() => setEditingAgent(null)}
+      {/* edit modal */}
+      {editing && (
+        <Modal
+          title="Edit agent"
+          onClose={() => setEditing(null)}
+          widthClass="max-w-lg"
+          footer={
+            <>
+              <button className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+              <button className="btn-primary" onClick={submitEdit as unknown as () => void} disabled={!editName.trim() || !editDesc.trim()}>Save changes</button>
+            </>
+          }
         >
-          <div 
-            className="bg-[#1a1a1a] border border-[#333] rounded-2xl w-full max-w-2xl p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-200"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-medium text-zinc-100">Edit Agent</h2>
-              <button 
-                type="button"
-                onClick={() => setEditingAgent(null)}
-                className="p-1.5 rounded-lg hover:bg-[#222] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-              >
-                <X size={18} strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <form onSubmit={handleEditSubmit} className="flex flex-col">
-              <div className="flex flex-col gap-4 mb-6">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="editAgentName" className="text-sm font-medium text-zinc-300">
-                    Name
-                  </label>
-                  <input
-                    id="editAgentName"
-                    type="text"
-                    required
-                    autoFocus
-                    value={editName}
-                    onChange={e => setEditName(e.target.value)}
-                    placeholder="Agent name"
-                    className="bg-[#222] border border-[#333] rounded-lg px-3.5 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="editAgentDescription" className="text-sm font-medium text-zinc-300">
-                    Description
-                  </label>
-                  <textarea
-                    id="editAgentDescription"
-                    rows={6}
-                    required
-                    value={editDescription}
-                    onChange={e => setEditDescription(e.target.value)}
-                    placeholder="Agent description"
-                    className="bg-[#222] border border-[#333] rounded-lg px-3.5 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-500 transition-colors min-h-[150px] resize-y"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end">
-                <button
-                  type="submit"
-                  disabled={!editName.trim() || !editDescription.trim()}
-                  className="px-5 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          <form onSubmit={submitEdit}>
+            <Field label="Name">
+              <input className="input-base" autoFocus value={editName} onChange={e => setEditName(e.target.value)} />
+            </Field>
+            <Field label="Description">
+              <textarea className="input-base min-h-[70px] resize-y" rows={3} value={editDesc} onChange={e => setEditDesc(e.target.value)} />
+            </Field>
+            <Field label="Instructions" hint="optional">
+              <textarea className="input-base min-h-[90px] resize-y" rows={4} value={editInstructions} onChange={e => setEditInstructions(e.target.value)} />
+            </Field>
+          </form>
+        </Modal>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deletingAgent && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[#1c1c1c] border border-[#2e2e2e] rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-6 flex flex-col gap-4">
-            <div className="flex items-center gap-3 text-rose-400">
-              <div className="w-9 h-9 rounded-full bg-rose-950/40 border border-rose-800/40 flex items-center justify-center">
-                <Trash2 size={18} />
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-zinc-100">Delete Agent</h3>
-                <p className="text-xs text-zinc-400">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-zinc-300">
-              Are you sure you want to delete <span className="font-semibold text-zinc-100">"{deletingAgent.name}"</span>?
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingAgent(null)}
-                className="px-4 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-[#252525] rounded-full transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteConfirm}
-                className="bg-rose-600 hover:bg-rose-500 text-white font-medium px-4 py-1.5 rounded-full text-xs transition-colors cursor-pointer"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* delete confirm */}
+      {deleting && (
+        <ConfirmDialog
+          title="Delete agent"
+          message={<>Delete <span className="font-medium text-ink-50">“{deleting.name}”</span>? This cannot be undone.</>}
+          onConfirm={() => { onDeleteAgent(deleting.id); setDeleting(null); flash(`Deleted agent "${deleting.name}"`); }}
+          onCancel={() => setDeleting(null)}
+        />
       )}
-
     </div>
   );
 }
